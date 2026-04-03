@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Test Observer — Milestone Dashboard</title>
+  <link rel="stylesheet"
+        href="https://assets.ubuntu.com/v1/vanilla-framework-version-4.9.0.min.css" />
+  <style>
+    html, body { height: 100%; margin: 0; }
+
+    /* ── Header ──────────────────────────────────────────── */
+    .p-navigation__logo-title { font-size: 1rem; color: #fff; }
+    .p-navigation__row {
+      padding: 0 !important; max-width: 100% !important;
+      margin-left: 0 !important; margin-right: 0 !important;
+    }
+    .p-navigation__banner { padding-left: 25px !important; }
+
+    /* ── Layout ──────────────────────────────────────────── */
+    .page-content { padding: 1.5rem 2rem; max-width: 1400px; margin: 0 auto; }
+
+    .milestone-bar {
+      background: #f7f7f7; border-bottom: 1px solid #e0e0e0;
+      padding: 0.6rem 2rem; display: flex; align-items: center;
+      gap: 1rem; font-size: 0.875rem;
+    }
+
+    /* ── Progress ────────────────────────────────────────── */
+    .progress-wrap { padding: 3rem 2rem; max-width: 600px; margin: 0 auto; text-align: center; }
+    .progress-label { margin-bottom: 0.5rem; font-size: 0.875rem; color: #666; }
+    .progress-bar-track { height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; }
+    .progress-bar-fill  { height: 100%; background: #E95420; border-radius: 4px; transition: width .3s; }
+
+    /* ── Stat cards ──────────────────────────────────────── */
+    .stat-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem; margin-bottom: 2rem;
+    }
+    .stat-card {
+      background: #fff; border: 1px solid #e0e0e0;
+      border-radius: 4px; padding: 1rem 1.25rem;
+    }
+    .stat-card__value { font-size: 2rem; font-weight: 700; line-height: 1; margin-bottom: .25rem; }
+    .stat-card__label { font-size: 0.8125rem; color: #666; }
+    .stat-card--passed  .stat-card__value { color: #0e8420; }
+    .stat-card--failed  .stat-card__value { color: #c7162b; }
+    .stat-card--pending .stat-card__value { color: #0066cc; }
+    .stat-card--neutral .stat-card__value { color: #333; }
+
+    /* ── Section titles ──────────────────────────────────── */
+    .section-title {
+      font-size: .9rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .05em; color: #333;
+      margin: 2rem 0 .75rem; padding-bottom: .4rem;
+      border-bottom: 2px solid #E95420; display: inline-block;
+    }
+
+    /* ── Two-col ─────────────────────────────────────────── */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem; }
+    @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ── Tables ──────────────────────────────────────────── */
+    .dash-table { width: 100%; font-size: 0.8125rem; border-collapse: collapse; }
+    .dash-table th {
+      background: #f0f0f0; text-align: left; padding: .4rem .6rem;
+      font-weight: 600; border-bottom: 2px solid #cdcdcd; white-space: nowrap;
+    }
+    .dash-table td {
+      padding: .35rem .6rem; border-bottom: 1px solid #e8e8e8; vertical-align: middle;
+    }
+    .dash-table tr:hover td { background: #fafafa; }
+
+    /* Sub-rows for multiple executions */
+    .sub-row td { background: #fafafa; padding-top: .2rem; padding-bottom: .2rem; }
+    .sub-row td:first-child { padding-left: 2rem; color: #888; font-size: 0.75rem; }
+
+    /* ── Rate bar ────────────────────────────────────────── */
+    .rate-bar { display:flex; height:8px; border-radius:3px; overflow:hidden; background:#e0e0e0; min-width:80px; }
+    .rate-bar__pass { background:#0e8420; }
+    .rate-bar__fail { background:#c7162b; }
+    .rate-bar__skip { background:#aaa; }
+
+    /* ── Chips ───────────────────────────────────────────── */
+    .chip {
+      display:inline-block; padding:.1em .45em; border-radius:2px;
+      font-size:.7rem; font-weight:700; margin:0 1px;
+    }
+    .chip--pass { background:#0e8420; color:#fff; }
+    .chip--fail { background:#c7162b; color:#fff; }
+    .chip--skip { background:#aaa;    color:#fff; }
+    .chip--prog { background:#0066cc; color:#fff; }
+    .chip--none { color:#bbb; font-style:italic; font-weight:400; font-size:.75rem; }
+
+    .badge-mand { color:#E95420; font-weight:700; font-size:.75rem; title:Mandatory; }
+
+    /* ── Failures list ───────────────────────────────────── */
+    .failure-item { margin: .25rem 0; font-size: .8125rem; }
+    .failure-item__artifact { font-weight: 600; color: #333; }
+    .failure-item__tester   { color: #666; }
+    .failure-item__comment  { color: #888; font-size: .75rem; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="p-navigation" data-theme="dark"
+          style="background-color:#2d2d2d; border-bottom:3px solid #E95420;">
+    <div class="p-navigation__row">
+      <div class="p-navigation__banner">
+        <div class="p-navigation__logo">
+          <a class="p-navigation__link" href="index.html">
+            <img src="https://assets.ubuntu.com/v1/82818827-CoF_white.svg"
+                 alt="Ubuntu" style="height:2rem; margin-right:.75rem;" />
+            <span class="p-navigation__logo-title" style="color:#fff;">Test Observer</span>
+          </a>
+        </div>
+      </div>
+      <nav class="p-navigation__nav"
+           style="margin-left:auto;align-items:center;padding-right:1.5rem;gap:1.5rem;display:flex;">
+        <a href="index.html"    style="color:rgba(255,255,255,.7);font-size:.875rem;text-decoration:none;">Artifacts</a>
+        <a href="milestone.html" style="color:#fff;font-size:.875rem;text-decoration:none;font-weight:600;">Milestones</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Milestone selector -->
+  <div class="milestone-bar">
+    <label for="ms-select" style="font-weight:600;">Milestone</label>
+    <select id="ms-select" class="p-form__control" style="width:auto;"></select>
+    <span id="ms-meta" style="color:#888;"></span>
+  </div>
+
+  <div class="page-content">
+
+    <!-- Progress -->
+    <div id="progress-area" class="progress-wrap">
+      <div class="progress-label" id="progress-label">Loading…</div>
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progress-bar" style="width:5%;"></div>
+      </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard" style="display:none;">
+
+      <div class="stat-cards" id="stat-cards"></div>
+
+      <div class="two-col">
+        <div>
+          <div class="section-title">By Product</div>
+          <table class="dash-table" id="tbl-product"></table>
+        </div>
+        <div>
+          <div class="section-title">By Type</div>
+          <table class="dash-table" id="tbl-type"></table>
+        </div>
+      </div>
+
+      <div class="section-title">Tester Leaderboard</div>
+      <table class="dash-table" id="tbl-leaderboard"></table>
+
+      <div class="section-title" style="margin-top:2rem;">Failures</div>
+      <div id="failures-area"></div>
+
+      <div class="section-title" style="margin-top:2rem;">All Builds</div>
+      <table class="dash-table" id="tbl-builds"></table>
+
+    </div>
+  </div>
+
+<script>
+/* ── Config ─────────────────────────────────────────────────────── */
+const API_BASE = 'http://localhost:8765';
+
+/* ── API ─────────────────────────────────────────────────────────── */
+async function api(path) {
+  const res = await fetch(`${API_BASE}${path}`, { headers: { 'X-CSRF-Token': '1' } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+/* ── Project → Test Observer os field mapping ────────────────────── */
+const PROJECT_OS = {
+  'ubuntu':         'ubuntu-desktop',
+  'edubuntu':       'edubuntu',
+  'kubuntu':        'kubuntu',
+  'lubuntu':        'lubuntu',
+  'ubuntu-base':    null,           // matched by name only
+  'ubuntu-budgie':  'ubuntu-budgie',
+  'ubuntu-unity':   'ubuntu-unity',
+  'ubuntucinnamon': 'ubuntucinnamon',
+  'ubuntustudio':   'ubuntustudio',
+  'xubuntu':        'xubuntu',
+  'ubuntu-mate':    'ubuntu-mate',
+};
+
+/* ── Artifact name + os filter derivation ────────────────────────── */
+// Returns { name, osFilter } — osFilter may be null (match any os)
+function deriveArtifact(release, { project, arch, type }) {
+  const os = PROJECT_OS[project] ?? null;
+
+  if (project === 'ubuntu-base')
+    return { name: `${release}-base-${arch}.tar.gz`, osFilter: null };
+
+  // All desktop images share the same artifact name, distinguished by os
+  if (type === 'desktop')
+    return { name: `${release}-desktop-${arch}.iso`, osFilter: os };
+
+  if (project === 'ubuntu') {
+    const nameMap = {
+      'live-server':          `${release}-live-server-${arch}.iso`,
+      'preinstalled-desktop': `${release}-preinstalled-desktop-${arch}.img.xz`,
+      'preinstalled-server':  `${release}-preinstalled-server-${arch}.img.xz`,
+      'wsl':                  `${release}-wsl-${arch}.wsl`,
+      'minimal':              `${release}-minimal-${arch}.iso`,
+    };
+    return { name: nameMap[type] || null, osFilter: null };
+  }
+
+  // Non-ubuntu flavors with non-desktop types
+  if (type === 'preinstalled-desktop')
+    return { name: `${release}-preinstalled-desktop-${arch}.img.xz`, osFilter: os };
+  if (type === 'minimal')
+    return { name: `${release}-minimal-${arch}.iso`, osFilter: os };
+
+  return { name: null, osFilter: null };
+}
+
+/* ── Progress ────────────────────────────────────────────────────── */
+function setProgress(pct, label) {
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-label').textContent = label;
+}
+
+/* ── Tester name extraction ──────────────────────────────────────── */
+function extractTester(resultName) {
+  const sep = resultName.indexOf(' - ');
+  return sep > -1 ? resultName.slice(0, sep).trim() : resultName.trim();
+}
+
+/* ── Render helpers ──────────────────────────────────────────────── */
+function chips(p, f, s, prog) {
+  const parts = [];
+  if (p)    parts.push(`<span class="chip chip--pass">✓${p}</span>`);
+  if (f)    parts.push(`<span class="chip chip--fail">✗${f}</span>`);
+  if (s)    parts.push(`<span class="chip chip--skip">~${s}</span>`);
+  if (prog) parts.push(`<span class="chip chip--prog">…${prog} in progress</span>`);
+  return parts.join('') || '<span class="chip chip--none">no tests</span>';
+}
+
+function rateBar(p, f, s) {
+  const total = p + f + s;
+  if (!total) return '<span style="color:#bbb">—</span>';
+  const pw = (p/total*100).toFixed(1), fw = (f/total*100).toFixed(1), sw = (s/total*100).toFixed(1);
+  const pct = Math.round(p/(p+f||1)*100);
+  return `<div style="display:flex;align-items:center;gap:.5rem;">
+    <div class="rate-bar" style="width:80px;">
+      <div class="rate-bar__pass" style="width:${pw}%;"></div>
+      <div class="rate-bar__fail" style="width:${fw}%;"></div>
+      <div class="rate-bar__skip" style="width:${sw}%;"></div>
+    </div>
+    <span style="font-size:.75rem;color:#555;">${pct}%</span>
+  </div>`;
+}
+
+/* ── Aggregate test results from enriched builds ─────────────────── */
+function aggregateResults(enrichedList) {
+  // Returns { passed, failed, skipped, inProgressExecs }
+  const r = { passed: 0, failed: 0, skipped: 0, inProgressExecs: 0 };
+  for (const e of enrichedList) {
+    for (const ex of e.manualExecs) {
+      if (ex.execStatus === 'IN_PROGRESS') r.inProgressExecs++;
+      for (const tr of ex.results) {
+        if (tr.status === 'PASSED')  r.passed++;
+        if (tr.status === 'FAILED')  r.failed++;
+        if (tr.status === 'SKIPPED') r.skipped++;
+      }
+    }
+  }
+  return r;
+}
+
+/* ── Main render ─────────────────────────────────────────────────── */
+function renderDashboard(milestone, enriched) {
+
+  /* ── Stat cards ─────────────────────────────────────────── */
+  const all     = aggregateResults(enriched);
+  const covered = enriched.filter(e => e.manualExecs.length > 0).length;
+  const total   = enriched.length;
+  const mandatoryFailing = enriched.filter(e =>
+    e.build.mandatory && e.manualExecs.some(ex => ex.results.some(r => r.status === 'FAILED'))
+  ).length;
+  const passRate = all.passed + all.failed > 0
+    ? Math.round(all.passed / (all.passed + all.failed) * 100) : null;
+
+  document.getElementById('stat-cards').innerHTML = `
+    <div class="stat-card stat-card--neutral">
+      <div class="stat-card__value">${total}</div>
+      <div class="stat-card__label">Builds<br><small>${enriched.filter(e=>e.build.mandatory).length} mandatory</small></div>
+    </div>
+    <div class="stat-card stat-card--neutral">
+      <div class="stat-card__value">${covered}</div>
+      <div class="stat-card__label">With manual tests<br><small>${total-covered} not yet tested</small></div>
+    </div>
+    <div class="stat-card stat-card--passed">
+      <div class="stat-card__value">${all.passed}</div>
+      <div class="stat-card__label">Tests passed</div>
+    </div>
+    <div class="stat-card stat-card--failed">
+      <div class="stat-card__value">${all.failed}</div>
+      <div class="stat-card__label">Tests failed<br><small>${mandatoryFailing} on mandatory builds</small></div>
+    </div>
+    <div class="stat-card stat-card--pending">
+      <div class="stat-card__value">${all.inProgressExecs}</div>
+      <div class="stat-card__label">Executions in progress</div>
+    </div>
+    <div class="stat-card stat-card--${passRate >= 80 ? 'passed' : passRate !== null ? 'failed' : 'neutral'}">
+      <div class="stat-card__value">${passRate !== null ? passRate + '%' : '—'}</div>
+      <div class="stat-card__label">Pass rate<br><small>(excl. skipped)</small></div>
+    </div>`;
+
+  /* ── By Product ─────────────────────────────────────────── */
+  const byProject = {};
+  for (const e of enriched) {
+    const p = e.build.project;
+    if (!byProject[p]) byProject[p] = [];
+    byProject[p].push(e);
+  }
+
+  document.getElementById('tbl-product').innerHTML = tableHTML(
+    ['Product', 'Builds', 'Tests', 'Rate'],
+    Object.entries(byProject).sort((a,b) => a[0].localeCompare(b[0])).map(([proj, items]) => {
+      const a = aggregateResults(items);
+      return [
+        `<strong>${proj}</strong>`,
+        items.length,
+        chips(a.passed, a.failed, a.skipped, a.inProgressExecs),
+        rateBar(a.passed, a.failed, a.skipped),
+      ];
+    })
+  );
+
+  /* ── By Type ─────────────────────────────────────────────── */
+  const byType = {};
+  for (const e of enriched) {
+    const t = e.build.type;
+    if (!byType[t]) byType[t] = [];
+    byType[t].push(e);
+  }
+
+  document.getElementById('tbl-type').innerHTML = tableHTML(
+    ['Type', 'Builds', 'Tests', 'Rate'],
+    Object.entries(byType).sort((a,b) => a[0].localeCompare(b[0])).map(([type, items]) => {
+      const a = aggregateResults(items);
+      return [
+        `<strong>${type}</strong>`,
+        items.length,
+        chips(a.passed, a.failed, a.skipped, a.inProgressExecs),
+        rateBar(a.passed, a.failed, a.skipped),
+      ];
+    })
+  );
+
+  /* ── Tester Leaderboard ──────────────────────────────────── */
+  const testers = {};
+  for (const e of enriched) {
+    for (const ex of e.manualExecs) {
+      for (const r of ex.results) {
+        const name = extractTester(r.name);
+        if (!testers[name]) testers[name] = { passed: 0, failed: 0, skipped: 0 };
+        if (r.status === 'PASSED')  testers[name].passed++;
+        if (r.status === 'FAILED')  testers[name].failed++;
+        if (r.status === 'SKIPPED') testers[name].skipped++;
+      }
+    }
+  }
+  const medals = ['🥇', '🥈', '🥉'];
+  const ranked = Object.entries(testers)
+    .map(([n, d]) => ({ name: n, ...d, total: d.passed + d.failed + d.skipped }))
+    .sort((a, b) => b.total - a.total);
+
+  document.getElementById('tbl-leaderboard').innerHTML = tableHTML(
+    ['', 'Tester', 'Total', 'Passed', 'Failed', 'Skipped', 'Rate'],
+    ranked.map((t, i) => [
+      medals[i] || `<span style="color:#888">${i+1}</span>`,
+      `<strong>${t.name}</strong>`,
+      t.total,
+      `<span style="color:#0e8420;font-weight:600;">${t.passed}</span>`,
+      t.failed > 0 ? `<span style="color:#c7162b;font-weight:600;">${t.failed}</span>` : t.failed,
+      `<span style="color:#888;">${t.skipped}</span>`,
+      rateBar(t.passed, t.failed, t.skipped),
+    ])
+  );
+
+  /* ── Failures ────────────────────────────────────────────── */
+  const failures = [];
+  for (const e of enriched) {
+    for (const ex of e.manualExecs) {
+      for (const r of ex.results.filter(r => r.status === 'FAILED')) {
+        failures.push({ build: e.build, result: r });
+      }
+    }
+  }
+
+  document.getElementById('failures-area').innerHTML = failures.length === 0
+    ? '<p style="color:#0e8420; font-size:.875rem;">No failures found.</p>'
+    : `<table class="dash-table">
+        <thead><tr><th>Product</th><th>Arch</th><th>Version</th><th>Test</th><th>Comment</th></tr></thead>
+        <tbody>
+          ${failures.map(({ build, result }) => `
+            <tr>
+              <td>${build.project}</td>
+              <td>${build.arch}</td>
+              <td style="font-family:monospace;">${build.version}</td>
+              <td>${result.name}</td>
+              <td style="color:#666;font-size:.75rem;max-width:400px;">${result.comment || ''}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+
+  /* ── All Builds ──────────────────────────────────────────── */
+  const tbody = enriched.map(e => {
+    const mainRow = `<tr>
+      <td>${e.build.project}</td>
+      <td>${e.build.type}</td>
+      <td>${e.build.arch}</td>
+      <td style="font-family:monospace;">${e.build.version}</td>
+      <td>${e.build.mandatory ? '<span class="badge-mand">★</span>' : ''}</td>
+      <td>${e.manualExecs.length}</td>
+      <td>${(() => {
+        const a = aggregateResults([e]);
+        return chips(a.passed, a.failed, a.skipped, a.inProgressExecs);
+      })()}</td>
+    </tr>`;
+
+    // Sub-rows for each execution
+    const subRows = e.manualExecs.map(ex => {
+      const p = ex.results.filter(r => r.status === 'PASSED').length;
+      const f = ex.results.filter(r => r.status === 'FAILED').length;
+      const s = ex.results.filter(r => r.status === 'SKIPPED').length;
+      const prog = ex.execStatus === 'IN_PROGRESS' ? ' (in progress)' : '';
+      return `<tr class="sub-row">
+        <td colspan="5">Execution #${ex.execId}${prog}</td>
+        <td></td>
+        <td>${chips(p, f, s, 0)}</td>
+      </tr>`;
+    }).join('');
+
+    return mainRow + subRows;
+  }).join('');
+
+  document.getElementById('tbl-builds').innerHTML = `
+    <thead><tr>
+      <th>Product</th><th>Type</th><th>Arch</th><th>Version</th>
+      <th title="Mandatory">M</th><th>Executions</th><th>Results</th>
+    </tr></thead>
+    <tbody>${tbody}</tbody>`;
+
+  document.getElementById('progress-area').style.display = 'none';
+  document.getElementById('dashboard').style.display    = 'block';
+}
+
+function tableHTML(headers, rows) {
+  return `
+    <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(cells =>
+      `<tr>${cells.map(c => `<td>${c}</td>`).join('')}</tr>`
+    ).join('')}</tbody>`;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Main load
+═══════════════════════════════════════════════════════════════════ */
+async function loadDashboard(milestone) {
+  document.getElementById('progress-area').style.display = 'block';
+  document.getElementById('dashboard').style.display     = 'none';
+  document.getElementById('ms-meta').textContent =
+    `${milestone.release} · ${milestone.builds.length} builds · ${milestone.date}`;
+
+  // 1. All artifacts
+  setProgress(5, 'Loading artifacts…');
+  const allArtifacts = await api('/v1/artefacts?family=image');
+
+  // 2. Build enriched list with matched artifact names + os filters
+  setProgress(10, 'Matching builds to artifacts…');
+  const enriched = milestone.builds.map(build => {
+    const { name, osFilter } = deriveArtifact(milestone.release, build);
+    return { build, artifactName: name, osFilter, artefactId: null, manualExecs: [] };
+  });
+
+  // 3. Resolve version-specific artefact_ids in parallel
+  setProgress(15, 'Resolving build versions…');
+  await Promise.all(enriched.map(async e => {
+    if (!e.artifactName) return;
+    const candidates = allArtifacts.filter(a =>
+      a.name === e.artifactName &&
+      a.release === milestone.release &&
+      (e.osFilter === null || a.os === e.osFilter)
+    );
+    for (const c of candidates) {
+      const versions = await api(`/v1/artefacts/${c.id}/versions`).catch(() => []);
+      const match    = versions.find(v => v.version === e.build.version);
+      if (match) { e.artefactId = match.artefact_id; return; }
+    }
+  }));
+
+  // 4. Fetch builds → collect manual test executions (deduplicated by exec id)
+  setProgress(45, 'Fetching test executions…');
+  const uniqueIds = [...new Set(enriched.filter(e => e.artefactId).map(e => e.artefactId))];
+  const execsByArtefact = {};  // artefactId → [{execId, execStatus}]
+
+  await Promise.all(uniqueIds.map(async id => {
+    const builds = await api(`/v1/artefacts/${id}/builds`).catch(() => []);
+    execsByArtefact[id] = builds
+      .flatMap(b => b.test_executions || [])
+      .filter(te => te.test_plan === 'Manual Testing')
+      .map(te => ({ execId: te.id, execStatus: te.status, results: [] }));
+  }));
+
+  enriched.forEach(e => {
+    if (e.artefactId) e.manualExecs = execsByArtefact[e.artefactId] || [];
+  });
+
+  // 5. Fetch test results for every manual execution (parallel)
+  const allExecs = enriched
+    .flatMap(e => e.manualExecs)
+    .filter((ex, i, arr) => arr.findIndex(x => x.execId === ex.execId) === i); // global dedup
+
+  const totalExecs = allExecs.length;
+  let done = 0;
+
+  await Promise.all(allExecs.map(async ex => {
+    ex.results = await api(`/v1/test-executions/${ex.execId}/test-results`).catch(() => []);
+    done++;
+    setProgress(
+      55 + Math.round(done / totalExecs * 40),
+      `Fetching test results… (${done}/${totalExecs})`
+    );
+  }));
+
+  // Re-attach results to enriched entries (shared exec objects are already mutated)
+  setProgress(98, 'Rendering…');
+  renderDashboard(milestone, enriched);
+}
+
+/* ── Boot ────────────────────────────────────────────────────────── */
+async function boot() {
+  let data;
+  try {
+    data = await (await fetch('milestones.json')).json();
+  } catch (e) {
+    document.getElementById('progress-label').textContent = 'Could not load milestones.json: ' + e.message;
+    return;
+  }
+
+  const milestones = data.milestones;
+  const select     = document.getElementById('ms-select');
+
+  milestones.forEach((ms, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${ms.release} — ${ms.name}  (${ms.date})`;
+    select.appendChild(opt);
+  });
+
+  select.addEventListener('change', () => loadDashboard(milestones[+select.value]));
+  loadDashboard(milestones[0]);
+}
+
+boot().catch(err => {
+  document.getElementById('progress-label').textContent = 'Error: ' + err.message;
+});
+</script>
+</body>
+</html>
