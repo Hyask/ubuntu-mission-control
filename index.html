@@ -468,9 +468,10 @@ const API_BASE = 'http://localhost:8765';
    All columns definition
 ═══════════════════════════════════════════════════════════════════ */
 const ALL_COLUMNS = [
-  { key: 'name',                              label: 'Name',             defaultOn: true  },
-  { key: 'version',                           label: 'Version',          defaultOn: true  },
-  { key: 'os',                                label: 'OS',               defaultOn: true  },
+  { key: 'name',          label: 'Name',          defaultOn: true  },
+  { key: 'version',       label: 'Version',       defaultOn: true  },
+  { key: 'build_history', label: 'Last 5 builds', defaultOn: true  },
+  { key: 'os',            label: 'OS',            defaultOn: true  },
   { key: 'release',                           label: 'Release',          defaultOn: true  },
   { key: 'stage',                             label: 'Stage',            defaultOn: true  },
   { key: 'status',                            label: 'Status',           defaultOn: true  },
@@ -485,8 +486,8 @@ const ALL_COLUMNS = [
   { key: 'sha256',                            label: 'SHA-256',          defaultOn: false },
   { key: 'archived',                          label: 'Archived',         defaultOn: false },
   { key: 'created_at',                        label: 'Created',          defaultOn: false },
-  { key: 'reviews', label: 'Reviews', defaultOn: true },
-  { key: 'bug_link',                          label: 'Bug link',         defaultOn: false },
+  { key: 'reviews',  label: 'Reviews',  defaultOn: true  },
+  { key: 'bug_link', label: 'Bug link', defaultOn: false },
 ];
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -501,7 +502,8 @@ const state = {
   sortKey: 'name',
   sortDir: 'asc',
   search: '',
-  colWidths: {},   // persists column widths across re-renders
+  colWidths: {},      // persists column widths across re-renders
+  versionCache: {},   // { [artifact_id]: Set<version_string> | 'loading' | 'error' }
 };
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -513,6 +515,59 @@ async function fetchArtefacts(family) {
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Build history helpers
+═══════════════════════════════════════════════════════════════════ */
+function lastNDays(n) {
+  const days = [];
+  const now = new Date();
+  for (let i = 0; i < n; i++) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    days.push(`${y}${m}${day}`);
+  }
+  return days; // [today, yesterday, ...]
+}
+
+function buildHistorySquares(versions) {
+  const days = lastNDays(5);
+  return days.map(day => {
+    const has = versions.has(day);
+    const color = has ? '#0e8420' : '#c7162b';
+    return `<span title="${day}" style="display:inline-block;width:11px;height:11px;background:${color};border-radius:2px;margin:0 1px;vertical-align:middle;"></span>`;
+  }).join('');
+}
+
+async function loadVersionsForItems(items) {
+  const uncached = items.filter(a => !state.versionCache[a.id]);
+  if (uncached.length === 0) return;
+
+  uncached.forEach(a => { state.versionCache[a.id] = 'loading'; });
+
+  await Promise.all(uncached.map(async a => {
+    try {
+      const res = await fetch(`${API_BASE}/v1/artefacts/${a.id}/versions`, {
+        headers: { 'X-CSRF-Token': '1' },
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      state.versionCache[a.id] = new Set(data.map(v => v.version));
+    } catch {
+      state.versionCache[a.id] = 'error';
+    }
+    // Update cell in-place
+    const cell = document.getElementById(`hist-${a.id}`);
+    if (!cell) return;
+    const cached = state.versionCache[a.id];
+    cell.innerHTML = (cached instanceof Set)
+      ? buildHistorySquares(cached)
+      : '<span style="color:#bbb">—</span>';
+  }));
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -539,6 +594,13 @@ function statusClass(s) {
 }
 
 function formatCell(key, value, artifact) {
+  if (key === 'build_history') {
+    const cached = state.versionCache[artifact?.id];
+    const inner = (cached instanceof Set)
+      ? buildHistorySquares(cached)
+      : '<span style="color:#bbb; font-size:0.7rem;">…</span>';
+    return `<span id="hist-${artifact?.id}">${inner}</span>`;
+  }
   if (key === 'reviews') {
     const done  = artifact?.completed_environment_reviews_count ?? 0;
     const total = artifact?.all_environment_reviews_count ?? 0;
@@ -767,6 +829,11 @@ function renderGrid() {
   countEl.textContent = shown < total
     ? `${shown} of ${total} artifacts`
     : `${total} artifact${total !== 1 ? 's' : ''}`;
+
+  // Fetch build history in background for all visible items
+  if (state.visibleColumns.has('build_history')) {
+    loadVersionsForItems(items);
+  }
 }
 
 function showError(msg) {
@@ -879,6 +946,7 @@ async function loadFamily(family) {
   state.family = family;
   state.artifacts = [];
   state.selectedRelease = '';
+  state.versionCache = {};
 
   document.getElementById('artifact-count').textContent = '';
   document.getElementById('grid-container').innerHTML = `
