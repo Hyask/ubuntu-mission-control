@@ -327,6 +327,7 @@
             <option value="owner">Owner</option>
             <option value="release">Release</option>
             <option value="stage">Stage</option>
+            <option value="status">Status</option>
           </select>
         </div>
 
@@ -391,8 +392,7 @@ const ALL_COLUMNS = [
   { key: 'sha256',                            label: 'SHA-256',          defaultOn: false },
   { key: 'archived',                          label: 'Archived',         defaultOn: false },
   { key: 'created_at',                        label: 'Created',          defaultOn: false },
-  { key: 'all_environment_reviews_count',     label: 'Reviews',          defaultOn: true  },
-  { key: 'completed_environment_reviews_count', label: 'Done reviews',   defaultOn: true  },
+  { key: 'reviews', label: 'Reviews', defaultOn: true },
   { key: 'bug_link',                          label: 'Bug link',         defaultOn: false },
 ];
 
@@ -445,17 +445,34 @@ function statusClass(s) {
   return map[s] || '';
 }
 
-function formatCell(key, value) {
+function formatCell(key, value, artifact) {
+  if (key === 'reviews') {
+    const done  = artifact?.completed_environment_reviews_count ?? 0;
+    const total = artifact?.all_environment_reviews_count ?? 0;
+    return `${done} / ${total}`;
+  }
   if (value === null || value === undefined || value === '') return '<span style="color:#bbb">—</span>';
-  if (key === 'status')   return `<span class="status ${statusClass(value)}">${value}</span>`;
+  if (key === 'status') {
+    const label = value === 'MARKED_AS_FAILED' ? 'REJECTED' : value;
+    return `<span class="status ${statusClass(value)}">${label}</span>`;
+  }
   if (key === 'stage')    return `<span class="stage-chip">${value}</span>`;
   if (key === 'archived') return value ? '✓' : '';
   if (key === 'created_at') return value.replace('T', ' ').slice(0, 16);
   if (key === 'sha256')   return `<span class="u-truncate" title="${value}">${value.slice(0,12)}…</span>`;
   if (key === 'bug_link' && value)
     return `<a href="${value}" target="_blank" rel="noopener">link</a>`;
-  if (key === 'name')
-    return `<span class="u-truncate" title="${value}">${value}</span>`;
+  if (key === 'name') {
+    const folderUrl = artifact?.image_url
+      ? artifact.image_url.slice(0, artifact.image_url.lastIndexOf('/') + 1)
+      : null;
+    const icon = folderUrl
+      ? `<a href="${folderUrl}" target="_blank" rel="noopener" title="Open image folder"
+            style="margin-right:0.4em; text-decoration:none; opacity:0.6; font-size:0.9em;"
+            onclick="event.stopPropagation()">⬇</a>`
+      : '';
+    return `${icon}<span class="u-truncate" title="${value}">${value}</span>`;
+  }
   return String(value);
 }
 
@@ -609,7 +626,7 @@ function renderGrid() {
       : '';
 
     const dataRows = gItems.map(a => {
-      const cells = cols.map(c => `<td>${formatCell(c.key, a[c.key])}</td>`).join('');
+      const cells = cols.map(c => `<td>${formatCell(c.key, a[c.key], a)}</td>`).join('');
       return `<tr>${cells}</tr>`;
     }).join('');
 
