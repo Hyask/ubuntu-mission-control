@@ -486,6 +486,7 @@ const ALL_COLUMNS = [
   { key: 'sha256',                            label: 'SHA-256',          defaultOn: false },
   { key: 'archived',                          label: 'Archived',         defaultOn: false },
   { key: 'created_at',                        label: 'Created',          defaultOn: false },
+  { key: 'tests',    label: 'Tests',    defaultOn: true  },
   { key: 'reviews',  label: 'Reviews',  defaultOn: true  },
   { key: 'bug_link', label: 'Bug link', defaultOn: false },
 ];
@@ -504,6 +505,7 @@ const state = {
   search: '',
   colWidths: {},      // persists column widths across re-renders
   versionCache: {},   // { [artifact_id]: Set<version_string> | 'loading' | 'error' }
+  buildsCache: {},    // { [artifact_id]: {PASSED,FAILED,IN_PROGRESS,...} | 'loading' | 'error' }
 };
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -570,6 +572,53 @@ async function loadVersionsForItems(items) {
   }));
 }
 
+function testsChips(counts) {
+  const cfg = [
+    { key: 'PASSED',            label: '✓', color: '#0e8420' },
+    { key: 'FAILED',            label: '✗', color: '#c7162b' },
+    { key: 'ENDED_PREMATURELY', label: '!', color: '#c7162b' },
+    { key: 'IN_PROGRESS',       label: '…', color: '#0066cc' },
+    { key: 'NOT_STARTED',       label: '○', color: '#999'    },
+    { key: 'NOT_TESTED',        label: '—', color: '#bbb'    },
+  ];
+  return cfg
+    .filter(c => counts[c.key])
+    .map(c => `<span title="${c.key}" style="display:inline-block;margin:0 2px;font-size:0.75rem;font-weight:700;color:${c.color};">${c.label}${counts[c.key]}</span>`)
+    .join('') || '<span style="color:#bbb">—</span>';
+}
+
+async function loadBuildsForItems(items) {
+  const uncached = items.filter(a => !state.buildsCache[a.id]);
+  if (uncached.length === 0) return;
+
+  uncached.forEach(a => { state.buildsCache[a.id] = 'loading'; });
+
+  await Promise.all(uncached.map(async a => {
+    try {
+      const res = await fetch(`${API_BASE}/v1/artefacts/${a.id}/builds`, {
+        headers: { 'X-CSRF-Token': '1' },
+      });
+      if (!res.ok) throw new Error();
+      const builds = await res.json();
+      const counts = {};
+      for (const b of builds) {
+        for (const te of (b.test_executions || [])) {
+          counts[te.status] = (counts[te.status] || 0) + 1;
+        }
+      }
+      state.buildsCache[a.id] = counts;
+    } catch {
+      state.buildsCache[a.id] = 'error';
+    }
+    const cell = document.getElementById(`tests-${a.id}`);
+    if (!cell) return;
+    const cached = state.buildsCache[a.id];
+    cell.innerHTML = (cached && typeof cached === 'object')
+      ? testsChips(cached)
+      : '<span style="color:#bbb">—</span>';
+  }));
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    Data helpers
 ═══════════════════════════════════════════════════════════════════ */
@@ -594,6 +643,13 @@ function statusClass(s) {
 }
 
 function formatCell(key, value, artifact) {
+  if (key === 'tests') {
+    const cached = state.buildsCache[artifact?.id];
+    const inner = (cached && typeof cached === 'object')
+      ? testsChips(cached)
+      : '<span style="color:#bbb;font-size:0.7rem;">…</span>';
+    return `<span id="tests-${artifact?.id}">${inner}</span>`;
+  }
   if (key === 'build_history') {
     const cached = state.versionCache[artifact?.id];
     const inner = (cached instanceof Set)
@@ -831,9 +887,8 @@ function renderGrid() {
     : `${total} artifact${total !== 1 ? 's' : ''}`;
 
   // Fetch build history in background for all visible items
-  if (state.visibleColumns.has('build_history')) {
-    loadVersionsForItems(items);
-  }
+  if (state.visibleColumns.has('build_history')) loadVersionsForItems(items);
+  if (state.visibleColumns.has('tests'))         loadBuildsForItems(items);
 }
 
 function showError(msg) {
@@ -947,6 +1002,7 @@ async function loadFamily(family) {
   state.artifacts = [];
   state.selectedRelease = '';
   state.versionCache = {};
+  state.buildsCache  = {};
 
   document.getElementById('artifact-count').textContent = '';
   document.getElementById('grid-container').innerHTML = `
