@@ -91,6 +91,17 @@
     .chip--none { color:#bbb; font-style:italic; font-weight:400; font-size:.75rem; }
 
 
+    /* ── LP bug badge ────────────────────────────────────── */
+    .lp-bug {
+      display: inline-flex; align-items: center; gap: .35em;
+      background: #f7f7f7; border: 1px solid #cdcdcd;
+      border-radius: 3px; padding: .15em .5em;
+      font-size: .8rem; font-weight: 600; text-decoration: none; color: #333;
+      white-space: nowrap;
+    }
+    .lp-bug:hover { background: #fff3e0; border-color: #E95420; color: #E95420; }
+    .lp-bug__icon { font-size: 1em; }
+
     /* ── Failures list ───────────────────────────────────── */
     .failure-item { margin: .25rem 0; font-size: .8125rem; }
     .failure-item__artifact { font-weight: 600; color: #333; }
@@ -160,6 +171,9 @@
       <div class="section-title" style="margin-top:2rem;">Failures</div>
       <div id="failures-area"></div>
 
+      <div class="section-title" style="margin-top:2rem;">Launchpad Bugs</div>
+      <div id="bugs-area"></div>
+
 
     </div>
   </div>
@@ -209,6 +223,7 @@ function deriveArtifact(release, { project, arch, type }) {
       'preinstalled-server':  `${release}-preinstalled-server-${arch}.img.xz`,
       'wsl':                  `${release}-wsl-${arch}.wsl`,
       'minimal':              `${release}-minimal-${arch}.iso`,
+      'mini':                 `${release}-mini-iso-${arch}.iso`,
     };
     return { name: nameMap[type] || null, osFilter: null };
   }
@@ -218,7 +233,6 @@ function deriveArtifact(release, { project, arch, type }) {
     return { name: `${release}-preinstalled-desktop-${arch}.img.xz`, osFilter: os };
   if (type === 'minimal')
     return { name: `${release}-minimal-${arch}.iso`, osFilter: os };
-
   return { name: null, osFilter: null };
 }
 
@@ -399,7 +413,69 @@ const passRate = all.passed + all.failed > 0
         </tbody>
       </table>`;
 
-document.getElementById('progress-area').style.display = 'none';
+  /* ── Launchpad Bugs ──────────────────────────────────────── */
+  const bugMap = {};
+  for (const e of enriched) {
+    for (const ex of e.manualExecs) {
+      for (const r of ex.results) {
+        const comment = r.comment || '';
+        const tester  = extractTester(r.name);
+        const found   = new Set();
+
+        // Structured issues linked via the API
+        for (const { issue } of (r.issues || []))
+          if (issue?.source === 'launchpad' && issue?.key) found.add(issue.key);
+
+        // Full URL: bugs.launchpad.net/.../+bug/NNNNNN
+        for (const m of comment.matchAll(/bugs\.launchpad\.net\/[^\s)]+\/\+bug\/(\d+)/gi))
+          found.add(m[1]);
+        // bug 2146369  /  bug #2146369
+        for (const m of comment.matchAll(/\bbug\s*#?(\d{5,7})\b/gi))
+          found.add(m[1]);
+        // LP: #2146369  /  LP #2146369
+        for (const m of comment.matchAll(/\bLP[:\s]+#?(\d{5,7})\b/gi))
+          found.add(m[1]);
+
+        for (const id of found) {
+          if (!bugMap[id]) bugMap[id] = { id, refs: [] };
+          bugMap[id].refs.push({
+            tester,
+            product: e.build.project,
+            arch:    e.build.arch,
+            status:  r.status,
+            comment: comment.replace(/\n+/g, ' ').slice(0, 180),
+          });
+        }
+      }
+    }
+  }
+
+  const bugs = Object.values(bugMap).sort((a, b) => parseInt(a.id) - parseInt(b.id));
+
+  document.getElementById('bugs-area').innerHTML = bugs.length === 0
+    ? '<p style="color:#888; font-size:.875rem;">No Launchpad bugs referenced.</p>'
+    : `<table class="dash-table">
+        <thead><tr>
+          <th>Bug</th><th>Product</th><th>Arch</th><th>Tester</th><th>Status</th><th>Comment</th>
+        </tr></thead>
+        <tbody>
+          ${bugs.flatMap(bug => bug.refs.map((ref, i) => `
+            <tr>
+              <td>${i === 0
+                ? `<a class="lp-bug" href="https://bugs.launchpad.net/ubuntu/+bug/${bug.id}" target="_blank" rel="noopener">
+                     <span class="lp-bug__icon">🐞</span> LP #${bug.id}
+                   </a>`
+                : ''}</td>
+              <td>${ref.product}</td>
+              <td>${ref.arch}</td>
+              <td>${ref.tester}</td>
+              <td><span class="chip ${ref.status === 'FAILED' ? 'chip--fail' : 'chip--pass'}">${ref.status}</span></td>
+              <td style="font-size:.75rem;color:#555;max-width:420px;">${ref.comment}</td>
+            </tr>`)).join('')}
+        </tbody>
+      </table>`;
+
+  document.getElementById('progress-area').style.display = 'none';
   document.getElementById('dashboard').style.display    = 'block';
 }
 
