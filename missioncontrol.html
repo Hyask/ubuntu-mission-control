@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Release Mission Control</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%; overflow: hidden;
+      background: #0a0a0f;
+      color: #e8e8e8;
+      font-family: 'Ubuntu', 'Segoe UI', system-ui, sans-serif;
+    }
+
+    /* ── Layout ───────────────────────────────────────────────── */
+    .mc-shell {
+      display: flex; flex-direction: column;
+      height: 100vh; overflow: hidden;
+    }
+
+    /* ── Header ───────────────────────────────────────────────── */
+    .mc-header {
+      flex-shrink: 0;
+      display: flex; align-items: center; gap: 1.5rem;
+      padding: 0 1.5rem;
+      height: 56px;
+      background: #111118;
+      border-bottom: 2px solid #E95420;
+    }
+    .mc-header__logo {
+      display: flex; align-items: center; gap: .75rem;
+      flex-shrink: 0;
+    }
+    .mc-header__logo img { height: 28px; }
+    .mc-header__title {
+      font-size: 1rem; font-weight: 700; letter-spacing: .12em;
+      text-transform: uppercase; color: #E95420;
+    }
+    .mc-header__sep { color: #444; user-select: none; }
+
+    .mc-header__milestone { display: flex; align-items: center; gap: .6rem; }
+    .mc-header__milestone select {
+      background: #1e1e2e; border: 1px solid #333;
+      color: #e8e8e8; padding: .25rem .6rem; border-radius: 3px;
+      font-size: .8125rem;
+    }
+    .mc-header__milestone-meta { color: #888; font-size: .8125rem; }
+
+    .mc-header__right {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 1.25rem;
+      font-size: .8125rem;
+    }
+    .mc-clock { font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #ccc; }
+    .mc-refresh-status { color: #888; font-size: .75rem; line-height: 1.4; text-align: right; }
+    .mc-refresh-status span { color: #aaa; font-weight: 600; }
+    .mc-refresh-btn {
+      background: #1e1e2e; border: 1px solid #444;
+      color: #ccc; padding: .3rem .8rem; border-radius: 3px;
+      cursor: pointer; font-size: .8125rem;
+      transition: border-color .15s, color .15s;
+    }
+    .mc-refresh-btn:hover { border-color: #E95420; color: #E95420; }
+    .mc-refresh-btn:disabled { opacity: .4; cursor: default; }
+
+    /* ── KPI row ──────────────────────────────────────────────── */
+    .mc-kpis {
+      flex-shrink: 0;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 0;
+      border-bottom: 1px solid #1e1e2e;
+    }
+    .mc-kpi {
+      padding: 1rem 1.5rem;
+      border-right: 1px solid #1e1e2e;
+      position: relative;
+      overflow: hidden;
+    }
+    .mc-kpi:last-child { border-right: none; }
+    .mc-kpi::before {
+      content: ''; position: absolute; inset: 0;
+      opacity: .05; pointer-events: none;
+    }
+    .mc-kpi__label {
+      font-size: .6875rem; font-weight: 700; letter-spacing: .1em;
+      text-transform: uppercase; color: #666; margin-bottom: .4rem;
+    }
+    .mc-kpi__value {
+      font-size: 3rem; font-weight: 700; line-height: 1;
+      font-variant-numeric: tabular-nums;
+      color: #e8e8e8;
+    }
+    .mc-kpi__sub {
+      font-size: .875rem; color: #777; margin-top: .3rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .mc-kpi__bar {
+      margin-top: .5rem; height: 4px; background: #1e1e2e;
+      border-radius: 2px; overflow: hidden;
+    }
+    .mc-kpi__bar-fill { height: 100%; border-radius: 2px; transition: width .6s ease; }
+
+    /* KPI state colors */
+    .mc-kpi--green  .mc-kpi__value { color: #34d058; }
+    .mc-kpi--green  .mc-kpi__bar-fill { background: #34d058; }
+    .mc-kpi--amber  .mc-kpi__value { color: #f8b500; }
+    .mc-kpi--amber  .mc-kpi__bar-fill { background: #f8b500; }
+    .mc-kpi--red    .mc-kpi__value { color: #f85149; }
+    .mc-kpi--red    .mc-kpi__bar-fill { background: #f85149; }
+    .mc-kpi--blue   .mc-kpi__value { color: #58a6ff; }
+    .mc-kpi--blue   .mc-kpi__bar-fill { background: #58a6ff; }
+    .mc-kpi--neutral .mc-kpi__value { color: #aaa; }
+    .mc-kpi--neutral .mc-kpi__bar-fill { background: #555; }
+
+    /* ── Grid area ────────────────────────────────────────────── */
+    .mc-grid-wrap {
+      flex: 1; overflow-y: auto; overflow-x: hidden;
+      padding: .75rem 1rem;
+    }
+    .mc-grid-wrap::-webkit-scrollbar { width: 6px; }
+    .mc-grid-wrap::-webkit-scrollbar-track { background: #0a0a0f; }
+    .mc-grid-wrap::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+    .mc-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: .5rem;
+    }
+
+    /* ── Product cards ────────────────────────────────────────── */
+    .mc-card {
+      border: 1px solid #222;
+      border-radius: 5px;
+      padding: .65rem .85rem;
+      position: relative;
+      transition: border-color .3s, background .3s;
+      background: #111118;
+    }
+    .mc-card--approved {
+      border-color: #1a5c1a;
+      background: #0d1f0d;
+    }
+    .mc-card--pending {
+      border-color: #5c4a00;
+      background: #1a1500;
+    }
+    .mc-card--failed {
+      border-color: #5c1a1a;
+      background: #1f0d0d;
+    }
+    .mc-card--unknown { border-color: #222; background: #111118; }
+
+    /* Mandatory badge */
+    .mc-card--mandatory::after {
+      content: '★';
+      position: absolute; top: .4rem; right: .55rem;
+      color: #E95420; font-size: .7rem;
+    }
+
+    .mc-card__name {
+      font-size: .8125rem; font-weight: 700; color: #ddd;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      padding-right: .5rem;
+    }
+    .mc-card__meta {
+      font-size: .6875rem; color: #555; margin-top: .1rem; margin-bottom: .4rem;
+    }
+    .mc-card__row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-top: .25rem;
+    }
+
+    /* Status badge */
+    .mc-badge {
+      display: inline-block; padding: .15em .5em;
+      border-radius: 2px; font-size: .65rem; font-weight: 700;
+      letter-spacing: .04em; text-transform: uppercase;
+    }
+    .mc-badge--approved  { background: #1a5c1a; color: #5ddb5d; }
+    .mc-badge--failed    { background: #5c1a1a; color: #f85149; }
+    .mc-badge--undecided { background: #2a2a00; color: #f8b500; }
+    .mc-badge--unknown   { background: #222; color: #666; }
+
+    /* Built-today indicator */
+    .mc-built {
+      display: inline-flex; align-items: center; gap: .25em;
+      font-size: .65rem; font-weight: 700;
+    }
+    .mc-built--yes { color: #34d058; }
+    .mc-built--no  { color: #555; }
+    .mc-built__dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .mc-built--yes .mc-built__dot { background: #34d058; box-shadow: 0 0 4px #34d058; }
+    .mc-built--no  .mc-built__dot { background: #333; }
+
+    /* Test chips */
+    .mc-tests {
+      display: flex; gap: .25rem; flex-wrap: wrap; margin-top: .3rem;
+    }
+    .mc-chip {
+      font-size: .6rem; font-weight: 700; padding: .1em .35em;
+      border-radius: 2px;
+    }
+    .mc-chip--pass { background: #1a4d1a; color: #5ddb5d; }
+    .mc-chip--fail { background: #4d1a1a; color: #f85149; }
+    .mc-chip--skip { background: #2a2a2a; color: #888; }
+    .mc-chip--prog { background: #1a2d4d; color: #58a6ff; }
+    .mc-chip--none { color: #444; font-style: italic; font-size: .65rem; }
+
+    /* Version string */
+    .mc-version {
+      font-size: .6rem; font-family: monospace; color: #444;
+      margin-top: .2rem;
+    }
+
+    /* ── Loading overlay ──────────────────────────────────────── */
+    .mc-overlay {
+      position: fixed; inset: 0;
+      background: rgba(10, 10, 15, .92);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100;
+      transition: opacity .3s;
+    }
+    .mc-overlay.hidden { opacity: 0; pointer-events: none; }
+    .mc-overlay__box {
+      background: #111118; border: 1px solid #333;
+      border-radius: 6px; padding: 2rem 3rem;
+      text-align: center; min-width: 320px;
+    }
+    .mc-overlay__title {
+      font-size: .75rem; font-weight: 700; letter-spacing: .1em;
+      text-transform: uppercase; color: #E95420; margin-bottom: 1rem;
+    }
+    .mc-overlay__label {
+      font-size: .875rem; color: #888; margin-bottom: .75rem;
+      min-height: 1.25em;
+    }
+    .mc-overlay__track {
+      height: 4px; background: #1e1e2e; border-radius: 2px; overflow: hidden;
+    }
+    .mc-overlay__fill {
+      height: 100%; background: #E95420; border-radius: 2px;
+      transition: width .3s ease; width: 0%;
+    }
+
+    /* ── Refresh pulse animation ──────────────────────────────── */
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .mc-refreshing .mc-refresh-btn { animation: pulse .8s infinite; }
+
+    /* ── Today badge ──────────────────────────────────────────── */
+    .mc-today {
+      font-size: .75rem; color: #E95420; font-weight: 700;
+      letter-spacing: .05em;
+    }
+  </style>
+</head>
+<body>
+
+<div class="mc-shell">
+
+  <!-- ── Header ──────────────────────────────────────────────── -->
+  <header class="mc-header">
+    <div class="mc-header__logo">
+      <img src="https://assets.ubuntu.com/v1/82818827-CoF_white.svg" alt="Ubuntu" />
+      <span class="mc-header__title">Release Mission Control</span>
+    </div>
+
+    <span class="mc-header__sep">|</span>
+
+    <div class="mc-header__milestone">
+      <select id="ms-select"></select>
+      <span class="mc-header__milestone-meta" id="ms-meta"></span>
+    </div>
+
+    <div class="mc-header__right">
+      <span class="mc-today" id="today-label"></span>
+      <div class="mc-refresh-status">
+        Last update: <span id="last-update">—</span><br>
+        Next refresh: <span id="countdown">—</span>
+      </div>
+      <div class="mc-clock" id="clock">—</div>
+      <button class="mc-refresh-btn" id="refresh-btn" onclick="manualRefresh()">↺ Refresh</button>
+    </div>
+  </header>
+
+  <!-- ── KPI row ─────────────────────────────────────────────── -->
+  <div class="mc-kpis" id="kpi-row">
+    <div class="mc-kpi mc-kpi--neutral" id="kpi-built">
+      <div class="mc-kpi__label">Built Today</div>
+      <div class="mc-kpi__value">—</div>
+      <div class="mc-kpi__sub">of total builds</div>
+      <div class="mc-kpi__bar"><div class="mc-kpi__bar-fill" style="width:0%"></div></div>
+    </div>
+    <div class="mc-kpi mc-kpi--neutral" id="kpi-approved">
+      <div class="mc-kpi__label">Approved</div>
+      <div class="mc-kpi__value">—</div>
+      <div class="mc-kpi__sub">of matched builds</div>
+      <div class="mc-kpi__bar"><div class="mc-kpi__bar-fill" style="width:0%"></div></div>
+    </div>
+    <div class="mc-kpi mc-kpi--neutral" id="kpi-tests">
+      <div class="mc-kpi__label">Test Executions</div>
+      <div class="mc-kpi__value">—</div>
+      <div class="mc-kpi__sub">manual runs</div>
+      <div class="mc-kpi__bar"><div class="mc-kpi__bar-fill" style="width:0%"></div></div>
+    </div>
+    <div class="mc-kpi mc-kpi--neutral" id="kpi-passrate">
+      <div class="mc-kpi__label">Pass Rate</div>
+      <div class="mc-kpi__value">—</div>
+      <div class="mc-kpi__sub">passed / (passed+failed)</div>
+      <div class="mc-kpi__bar"><div class="mc-kpi__bar-fill" style="width:0%"></div></div>
+    </div>
+    <div class="mc-kpi mc-kpi--neutral" id="kpi-bugs">
+      <div class="mc-kpi__label">Open Bugs</div>
+      <div class="mc-kpi__value">—</div>
+      <div class="mc-kpi__sub">LP bugs referenced</div>
+      <div class="mc-kpi__bar"><div class="mc-kpi__bar-fill" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <!-- ── Product grid ────────────────────────────────────────── -->
+  <div class="mc-grid-wrap">
+    <div class="mc-grid" id="mc-grid"></div>
+  </div>
+
+</div>
+
+<!-- ── Loading overlay ─────────────────────────────────────── -->
+<div class="mc-overlay" id="mc-overlay">
+  <div class="mc-overlay__box">
+    <div class="mc-overlay__title">Loading Data</div>
+    <div class="mc-overlay__label" id="mc-status">Initialising…</div>
+    <div class="mc-overlay__track">
+      <div class="mc-overlay__fill" id="mc-bar"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   Config
+═══════════════════════════════════════════════════════════════ */
+const API_BASE       = 'http://localhost:8765';
+const REFRESH_SECS   = 120;  // 2 minutes
+
+/* ═══════════════════════════════════════════════════════════════
+   State
+═══════════════════════════════════════════════════════════════ */
+let countdownTimer  = null;
+let countdownVal    = REFRESH_SECS;
+let currentMilestone = null;
+let isLoading       = false;
+
+/* ═══════════════════════════════════════════════════════════════
+   Helpers
+═══════════════════════════════════════════════════════════════ */
+function todayStr() {
+  // Returns YYYYMMDD matching the version date format
+  return new Date().toISOString().slice(0, 10).replace(/-/g, '');
+}
+
+function fmtTime(d) {
+  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function fmtDate(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+async function api(path) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { 'X-CSRF-Token': '1' }
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Artifact name derivation (from milestone.html)
+═══════════════════════════════════════════════════════════════ */
+const PROJECT_OS = {
+  'ubuntu':         'ubuntu-desktop',
+  'edubuntu':       'edubuntu',
+  'kubuntu':        'kubuntu',
+  'lubuntu':        'lubuntu',
+  'ubuntu-base':    null,
+  'ubuntu-budgie':  'ubuntu-budgie',
+  'ubuntu-unity':   'ubuntu-unity',
+  'ubuntucinnamon': 'ubuntucinnamon',
+  'ubuntustudio':   'ubuntustudio',
+  'xubuntu':        'xubuntu',
+  'ubuntu-mate':    'ubuntu-mate',
+  'ubuntukylin':    'ubuntukylin',
+};
+
+function deriveArtifact(release, { project, arch, type }) {
+  const os = PROJECT_OS[project] ?? null;
+
+  if (project === 'ubuntu-base')
+    return { name: `${release}-base-${arch}.tar.gz`, osFilter: null };
+
+  if (type === 'desktop')
+    return { name: `${release}-desktop-${arch}.iso`, osFilter: os };
+
+  if (project === 'ubuntu') {
+    const nameMap = {
+      'live-server':          `${release}-live-server-${arch}.iso`,
+      'preinstalled-desktop': `${release}-preinstalled-desktop-${arch}.img.xz`,
+      'preinstalled-server':  `${release}-preinstalled-server-${arch}.img.xz`,
+      'wsl':                  `${release}-wsl-${arch}.wsl`,
+      'minimal':              `${release}-minimal-${arch}.iso`,
+      'mini':                 `${release}-mini-iso-${arch}.iso`,
+    };
+    return { name: nameMap[type] || null, osFilter: null };
+  }
+
+  if (type === 'preinstalled-desktop')
+    return { name: `${release}-preinstalled-desktop-${arch}.img.xz`, osFilter: os };
+  if (type === 'minimal')
+    return { name: `${release}-minimal-${arch}.iso`, osFilter: os };
+  return { name: null, osFilter: null };
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Progress overlay
+═══════════════════════════════════════════════════════════════ */
+function showOverlay(label, pct) {
+  document.getElementById('mc-overlay').classList.remove('hidden');
+  document.getElementById('mc-status').textContent = label;
+  document.getElementById('mc-bar').style.width = pct + '%';
+}
+
+function hideOverlay() {
+  document.getElementById('mc-overlay').classList.add('hidden');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   KPI rendering
+═══════════════════════════════════════════════════════════════ */
+function kpiState(pct) {
+  if (pct === null) return 'neutral';
+  if (pct >= 80) return 'green';
+  if (pct >= 50) return 'amber';
+  return 'red';
+}
+
+function setKpi(id, value, sub, pct, stateOverride) {
+  const el = document.getElementById(id);
+  const state = stateOverride !== undefined ? stateOverride : kpiState(pct);
+  el.className = `mc-kpi mc-kpi--${state}`;
+  el.querySelector('.mc-kpi__value').textContent = value;
+  el.querySelector('.mc-kpi__sub').textContent   = sub;
+  el.querySelector('.mc-kpi__bar-fill').style.width = (pct !== null ? pct : 0) + '%';
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Product card rendering
+═══════════════════════════════════════════════════════════════ */
+function cardStateClass(item) {
+  if (!item.artifact) return 'mc-card--unknown';
+  if (item.artifact.status === 'APPROVED')         return 'mc-card--approved';
+  if (item.artifact.status === 'MARKED_AS_FAILED') return 'mc-card--failed';
+  return 'mc-card--pending';
+}
+
+function badgeHtml(status) {
+  if (!status) return '<span class="mc-badge mc-badge--unknown">—</span>';
+  const cls = {
+    APPROVED:         'mc-badge--approved',
+    MARKED_AS_FAILED: 'mc-badge--failed',
+    UNDECIDED:        'mc-badge--undecided',
+  }[status] || 'mc-badge--unknown';
+  const lbl = {
+    APPROVED:         '✓ Approved',
+    MARKED_AS_FAILED: '✗ Failed',
+    UNDECIDED:        '? Undecided',
+  }[status] || status;
+  return `<span class="mc-badge ${cls}">${lbl}</span>`;
+}
+
+function builtHtml(item) {
+  if (item.builtToday) {
+    return `<span class="mc-built mc-built--yes">
+      <span class="mc-built__dot"></span>Built today
+    </span>`;
+  }
+  if (item.artifact) {
+    return `<span class="mc-built mc-built--no">
+      <span class="mc-built__dot"></span>Prev build
+    </span>`;
+  }
+  return `<span class="mc-built mc-built--no">
+    <span class="mc-built__dot"></span>No match
+  </span>`;
+}
+
+function testChipsHtml(item) {
+  const { passed, failed, inProgress, notStarted } = item.execCounts || {};
+  const parts = [];
+  if (passed > 0)     parts.push(`<span class="mc-chip mc-chip--pass">✓ ${passed}</span>`);
+  if (failed > 0)     parts.push(`<span class="mc-chip mc-chip--fail">✗ ${failed}</span>`);
+  if (inProgress > 0) parts.push(`<span class="mc-chip mc-chip--prog">… ${inProgress}</span>`);
+  if (notStarted > 0) parts.push(`<span class="mc-chip mc-chip--skip">○ ${notStarted}</span>`);
+  if (!parts.length)  return '<span class="mc-chip mc-chip--none">no tests</span>';
+  return parts.join('');
+}
+
+function renderGrid(items) {
+  const grid = document.getElementById('mc-grid');
+  grid.innerHTML = items.map(item => {
+    const { project, arch, type, mandatory } = item.build;
+    const mandatoryClass = mandatory ? ' mc-card--mandatory' : '';
+    const stateClass = cardStateClass(item);
+    const version = item.artifact ? item.artifact.version : null;
+    const os = item.artifact ? (item.artifact.os || '') : '';
+
+    return `<div class="mc-card ${stateClass}${mandatoryClass}">
+      <div class="mc-card__name" title="${project} ${type} ${arch}">${project}</div>
+      <div class="mc-card__meta">${type} · ${arch}${os ? ' · ' + os : ''}</div>
+      <div class="mc-card__row">
+        ${badgeHtml(item.artifact ? item.artifact.status : null)}
+        ${builtHtml(item)}
+      </div>
+      <div class="mc-tests">${testChipsHtml(item)}</div>
+      ${version ? `<div class="mc-version">${version}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Data loading pipeline
+═══════════════════════════════════════════════════════════════ */
+async function loadDashboard(milestone) {
+  if (isLoading) return;
+  isLoading = true;
+  document.getElementById('refresh-btn').disabled = true;
+  document.querySelector('.mc-shell').classList.add('mc-refreshing');
+
+  const today = todayStr();
+
+  try {
+    // ── Step 1: All artifacts ──────────────────────────────────
+    showOverlay('Loading artifacts…', 5);
+    const allArtifacts = await api('/v1/artefacts?family=image');
+
+    // ── Step 2: Build item list with artifact matching ─────────
+    showOverlay('Matching builds to artifacts…', 15);
+    const items = milestone.builds.map(build => {
+      const { name, osFilter } = deriveArtifact(milestone.release, build);
+      return {
+        build,
+        artifactName: name,
+        osFilter,
+        artifact: null,
+        builtToday: false,
+        execCounts: { passed: 0, failed: 0, inProgress: 0, notStarted: 0 },
+        bugs: new Set(),
+      };
+    });
+
+    // Phase 1 render: show skeleton grid immediately
+    renderGrid(items);
+
+    // ── Step 3: Match artifacts from the main list ─────────────
+    showOverlay('Resolving artifact versions…', 20);
+    const artifactsByNameOs = {};
+    for (const a of allArtifacts) {
+      const k = `${a.name}||${a.release}||${a.os || ''}`;
+      if (!artifactsByNameOs[k]) artifactsByNameOs[k] = [];
+      artifactsByNameOs[k].push(a);
+    }
+
+    // For each item, find matching artifact candidates then resolve versions
+    await Promise.all(items.map(async item => {
+      if (!item.artifactName) return;
+
+      const candidates = allArtifacts.filter(a =>
+        a.name === item.artifactName &&
+        a.release === milestone.release &&
+        (item.osFilter === null || a.os === item.osFilter)
+      );
+
+      if (!candidates.length) return;
+
+      // Try to find a version built today via the versions endpoint
+      for (const c of candidates) {
+        const versions = await api(`/v1/artefacts/${c.id}/versions`).catch(() => []);
+
+        // Look for today's version first
+        const todayVersion = versions.find(v => v.version && v.version.startsWith(today));
+        if (todayVersion) {
+          // Fetch the specific artefact record for today's version to get its status
+          const specific = await api(`/v1/artefacts/${todayVersion.artefact_id}`).catch(() => null);
+          item.artifact  = specific || { ...c, version: todayVersion.version, id: todayVersion.artefact_id };
+          item.builtToday = true;
+          if (!item.artifact.os) item.artifact.os = c.os;
+          return;
+        }
+
+        // Fall back to the milestone's specified version
+        const milestoneVersion = versions.find(v => v.version === item.build.version);
+        if (milestoneVersion) {
+          const specific = await api(`/v1/artefacts/${milestoneVersion.artefact_id}`).catch(() => null);
+          item.artifact = specific || { ...c, version: milestoneVersion.version, id: milestoneVersion.artefact_id };
+          if (!item.artifact.os) item.artifact.os = c.os;
+          return;
+        }
+
+        // Last resort: use the candidate artifact itself
+        item.artifact = c;
+      }
+    }));
+
+    // Phase 2 render: now we have artifact statuses
+    renderGrid(items);
+
+    // Compute approved KPI
+    const matched   = items.filter(i => i.artifact);
+    const builtToday = items.filter(i => i.builtToday).length;
+    const approved  = matched.filter(i => i.artifact.status === 'APPROVED').length;
+    const builtPct  = matched.length > 0 ? Math.round(builtToday / items.length * 100) : null;
+    const appPct    = matched.length > 0 ? Math.round(approved / matched.length * 100) : null;
+
+    setKpi('kpi-built',
+      `${builtToday}/${items.length}`,
+      `of ${items.length} milestone builds`,
+      builtPct
+    );
+    setKpi('kpi-approved',
+      `${approved}/${matched.length}`,
+      `${appPct !== null ? appPct + '% ' : ''}of matched builds`,
+      appPct
+    );
+
+    // ── Step 4: Fetch test executions ──────────────────────────
+    showOverlay('Fetching test executions…', 55);
+    const uniqueArtIds = [...new Set(items.filter(i => i.artifact).map(i => i.artifact.id))];
+
+    const execsByArtId = {};
+    await Promise.all(uniqueArtIds.map(async id => {
+      const builds = await api(`/v1/artefacts/${id}/builds`).catch(() => []);
+      const execs = builds.flatMap(b => b.test_executions || [])
+        .filter(te => te.test_plan === 'Manual Testing');
+      execsByArtId[id] = execs;
+    }));
+
+    // Attach execution counts to items
+    for (const item of items) {
+      if (!item.artifact) continue;
+      const execs = execsByArtId[item.artifact.id] || [];
+      item.execCounts = {
+        passed:     execs.filter(e => e.status === 'PASSED').length,
+        failed:     execs.filter(e => e.status === 'FAILED' || e.status === 'ENDED_PREMATURELY').length,
+        inProgress: execs.filter(e => e.status === 'IN_PROGRESS').length,
+        notStarted: execs.filter(e => e.status === 'NOT_STARTED' || e.status === 'NOT_TESTED').length,
+      };
+    }
+
+    // Phase 3 render: test counts visible on cards
+    renderGrid(items);
+
+    // Compute test KPIs
+    const totalExecs   = items.reduce((s, i) =>
+      s + Object.values(i.execCounts).reduce((a, b) => a + b, 0), 0);
+    const totalPassed  = items.reduce((s, i) => s + i.execCounts.passed, 0);
+    const totalFailed  = items.reduce((s, i) => s + i.execCounts.failed, 0);
+    const totalIP      = items.reduce((s, i) => s + i.execCounts.inProgress, 0);
+    const passRate     = (totalPassed + totalFailed) > 0
+      ? Math.round(totalPassed / (totalPassed + totalFailed) * 100) : null;
+
+    setKpi('kpi-tests',
+      totalExecs,
+      `${totalPassed} pass · ${totalFailed} fail · ${totalIP} in progress`,
+      totalExecs > 0 ? Math.round(totalPassed / totalExecs * 100) : null,
+      'blue'
+    );
+    setKpi('kpi-passrate',
+      passRate !== null ? passRate + '%' : '—',
+      'passed / (passed + failed)',
+      passRate
+    );
+
+    // ── Step 5: Fetch test results for bug extraction ──────────
+    showOverlay('Fetching test results for bug analysis…', 70);
+
+    const allManualExecs = [];
+    for (const item of items) {
+      if (!item.artifact) continue;
+      const execs = execsByArtId[item.artifact.id] || [];
+      for (const ex of execs) {
+        allManualExecs.push({ item, execId: ex.id });
+      }
+    }
+
+    // Deduplicate by execId
+    const seenExecIds = new Set();
+    const uniqueExecs = allManualExecs.filter(e => {
+      if (seenExecIds.has(e.execId)) return false;
+      seenExecIds.add(e.execId);
+      return true;
+    });
+
+    // Collect all bugs across all test results
+    const globalBugs = new Set();
+    let doneExecs = 0;
+
+    await Promise.all(uniqueExecs.map(async ({ item, execId }) => {
+      const results = await api(`/v1/test-executions/${execId}/test-results`).catch(() => []);
+      for (const r of results) {
+        const comment = r.comment || '';
+
+        // Structured issues
+        for (const { issue } of (r.issues || []))
+          if (issue?.source === 'launchpad' && issue?.key) {
+            globalBugs.add(issue.key);
+            item.bugs.add(issue.key);
+          }
+
+        // Bug patterns in comments
+        const patterns = [
+          /bugs\.launchpad\.net\/[^\s)]+\/\+bug\/(\d+)/gi,
+          /\bbug\s*#?(\d{5,7})\b/gi,
+          /\bLP[:\s]+#?(\d{5,7})\b/gi,
+        ];
+        for (const pat of patterns)
+          for (const m of comment.matchAll(pat)) {
+            globalBugs.add(m[1]);
+            item.bugs.add(m[1]);
+          }
+      }
+      doneExecs++;
+      const pct = 70 + Math.round(doneExecs / (uniqueExecs.length || 1) * 25);
+      showOverlay(`Analysing test results… (${doneExecs}/${uniqueExecs.length})`, pct);
+    }));
+
+    // Bug KPI
+    const bugCount = globalBugs.size;
+    const bugState = bugCount === 0 ? 'green' : bugCount <= 3 ? 'amber' : 'red';
+    setKpi('kpi-bugs',
+      bugCount,
+      bugCount === 0 ? 'No LP bugs referenced' : `LP bug${bugCount > 1 ? 's' : ''} in test comments`,
+      bugCount === 0 ? 100 : null,
+      bugState
+    );
+
+    showOverlay('Rendering…', 98);
+    renderGrid(items);
+
+    // ── Done ───────────────────────────────────────────────────
+    document.getElementById('last-update').textContent = fmtTime(new Date());
+
+  } catch (err) {
+    console.error('Dashboard load error:', err);
+    showOverlay('Error: ' + err.message, 0);
+    setTimeout(hideOverlay, 4000);
+  } finally {
+    isLoading = false;
+    document.getElementById('refresh-btn').disabled = false;
+    document.querySelector('.mc-shell').classList.remove('mc-refreshing');
+    hideOverlay();
+    resetCountdown();
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Countdown + auto-refresh
+═══════════════════════════════════════════════════════════════ */
+function resetCountdown() {
+  clearInterval(countdownTimer);
+  countdownVal = REFRESH_SECS;
+  updateCountdownDisplay();
+  countdownTimer = setInterval(() => {
+    countdownVal--;
+    updateCountdownDisplay();
+    if (countdownVal <= 0) {
+      clearInterval(countdownTimer);
+      if (currentMilestone) loadDashboard(currentMilestone);
+    }
+  }, 1000);
+}
+
+function updateCountdownDisplay() {
+  const m = Math.floor(countdownVal / 60);
+  const s = countdownVal % 60;
+  document.getElementById('countdown').textContent =
+    `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function manualRefresh() {
+  clearInterval(countdownTimer);
+  if (currentMilestone) loadDashboard(currentMilestone);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Clock
+═══════════════════════════════════════════════════════════════ */
+function startClock() {
+  function tick() {
+    document.getElementById('clock').textContent = fmtTime(new Date());
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Boot
+═══════════════════════════════════════════════════════════════ */
+async function boot() {
+  startClock();
+
+  // Show today's date
+  const now = new Date();
+  document.getElementById('today-label').textContent = fmtDate(now);
+
+  let data;
+  try {
+    data = await (await fetch('milestones.json')).json();
+  } catch (e) {
+    showOverlay('Could not load milestones.json: ' + e.message, 0);
+    return;
+  }
+
+  const milestones = data.milestones;
+  const select     = document.getElementById('ms-select');
+
+  milestones.forEach((ms, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${ms.release} — ${ms.name} (${ms.date})`;
+    select.appendChild(opt);
+  });
+
+  function loadSelected() {
+    const ms = milestones[+select.value];
+    currentMilestone = ms;
+    document.getElementById('ms-meta').textContent =
+      `${ms.builds.length} builds · ${ms.date}`;
+    loadDashboard(ms);
+  }
+
+  select.addEventListener('change', loadSelected);
+  loadSelected();
+}
+
+boot().catch(err => {
+  showOverlay('Fatal error: ' + err.message, 0);
+});
+</script>
+</body>
+</html>
