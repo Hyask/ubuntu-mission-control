@@ -44,7 +44,7 @@
     .mc-header__milestone select {
       background: #1e1e2e; border: 1px solid #333;
       color: #e8e8e8; padding: .25rem .6rem; border-radius: 3px;
-      font-size: .8125rem;
+      font-size: .9rem; font-weight: 700;
     }
     .mc-header__milestone-meta { color: #888; font-size: .8125rem; }
 
@@ -291,9 +291,9 @@
   <!-- ── KPI row ─────────────────────────────────────────────── -->
   <div class="mc-kpis" id="kpi-row">
     <div class="mc-kpi mc-kpi--neutral" id="kpi-built">
-      <div class="mc-kpi__label">Built Today</div>
+      <div class="mc-kpi__label">Builds Today</div>
       <div class="mc-kpi__value">—</div>
-      <div class="mc-kpi__sub">of total builds</div>
+      <div class="mc-kpi__sub">artifacts found for today</div>
       <div class="mc-kpi__bar"><div class="mc-kpi__bar-fill" style="width:0%"></div></div>
     </div>
     <div class="mc-kpi mc-kpi--neutral" id="kpi-approved">
@@ -460,11 +460,15 @@ function setKpi(id, value, sub, pct, stateOverride) {
 /* ═══════════════════════════════════════════════════════════════
    Product card rendering
 ═══════════════════════════════════════════════════════════════ */
-function cardStateClass(item) {
-  if (!item.artifact) return 'mc-card--unknown';
-  if (item.artifact.status === 'APPROVED')         return 'mc-card--approved';
-  if (item.artifact.status === 'MARKED_AS_FAILED') return 'mc-card--failed';
-  return 'mc-card--pending';
+
+// Extract a human-readable type from the artifact filename.
+// e.g. "resolute-live-server-amd64.iso" → "live-server"
+function artifactType(a) {
+  let n = a.name || '';
+  if (a.release && n.startsWith(a.release + '-')) n = n.slice(a.release.length + 1);
+  // Strip trailing "-arch[+variant].ext(s)"
+  n = n.replace(/[-_]?(amd64|arm64(\+[\w]+)?|armhf|ppc64el|riscv64|s390x)([-+].+)?(\.\w+)+$/, '');
+  return n || a.name;
 }
 
 function badgeHtml(status) {
@@ -482,22 +486,6 @@ function badgeHtml(status) {
   return `<span class="mc-badge ${cls}">${lbl}</span>`;
 }
 
-function builtHtml(item) {
-  if (item.builtToday) {
-    return `<span class="mc-built mc-built--yes">
-      <span class="mc-built__dot"></span>Built today
-    </span>`;
-  }
-  if (item.artifact) {
-    return `<span class="mc-built mc-built--no">
-      <span class="mc-built__dot"></span>Prev build
-    </span>`;
-  }
-  return `<span class="mc-built mc-built--no">
-    <span class="mc-built__dot"></span>No match
-  </span>`;
-}
-
 function testChipsHtml(item) {
   const { passed, failed, inProgress, notStarted } = item.execCounts || {};
   const parts = [];
@@ -511,22 +499,28 @@ function testChipsHtml(item) {
 
 function renderGrid(items) {
   const grid = document.getElementById('mc-grid');
+  if (!items.length) {
+    grid.innerHTML = '<div style="color:#555;padding:2rem;grid-column:1/-1;font-size:.9rem;">No artifacts built today yet.</div>';
+    return;
+  }
   grid.innerHTML = items.map(item => {
-    const { project, arch, type, mandatory } = item.build;
-    const mandatoryClass = mandatory ? ' mc-card--mandatory' : '';
-    const stateClass = cardStateClass(item);
-    const version = item.artifact ? item.artifact.version : null;
-    const os = item.artifact ? (item.artifact.os || '') : '';
+    const a = item.artifact;
+    const stateClass = a.status === 'APPROVED'         ? 'mc-card--approved'
+                     : a.status === 'MARKED_AS_FAILED' ? 'mc-card--failed'
+                     :                                    'mc-card--pending';
+    const mandatoryClass = item.mandatory ? ' mc-card--mandatory' : '';
+    const displayName = a.os || artifactType(a);
+    const arch = a.architecture || '';
+    const type = artifactType(a);
 
     return `<div class="mc-card ${stateClass}${mandatoryClass}">
-      <div class="mc-card__name" title="${project} ${type} ${arch}">${project}</div>
-      <div class="mc-card__meta">${type} · ${arch}${os ? ' · ' + os : ''}</div>
+      <div class="mc-card__name" title="${a.name}">${displayName}</div>
+      <div class="mc-card__meta">${type} · ${arch}</div>
       <div class="mc-card__row">
-        ${badgeHtml(item.artifact ? item.artifact.status : null)}
-        ${builtHtml(item)}
+        ${badgeHtml(a.status)}
       </div>
       <div class="mc-tests">${testChipsHtml(item)}</div>
-      ${version ? `<div class="mc-version">${version}</div>` : ''}
+      <div class="mc-version">${a.version}</div>
     </div>`;
   }).join('');
 }
@@ -543,137 +537,71 @@ async function loadDashboard(milestone) {
   const today = todayStr();
 
   try {
-    // ── Step 1: All artifacts ──────────────────────────────────
+    // ── Step 1: All artifacts, filtered to today's builds ──────
     showOverlay('Loading artifacts…', 5);
     const allArtifacts = await api('/v1/artefacts?family=image');
 
-    // ── Step 2: Build item list with artifact matching ─────────
-    showOverlay('Matching builds to artifacts…', 15);
-    const items = milestone.builds.map(build => {
+    // Only keep artifacts for this release whose version is from today
+    showOverlay("Filtering today's builds…", 15);
+    const todayArtifacts = allArtifacts.filter(a =>
+      a.release === milestone.release &&
+      a.version && a.version.startsWith(today)
+    );
+
+    // Build a mandatory-build lookup from the milestone config
+    const mandatoryKeys = new Set();
+    for (const build of milestone.builds) {
+      if (!build.mandatory) continue;
       const { name, osFilter } = deriveArtifact(milestone.release, build);
-      return {
-        build,
-        artifactName: name,
-        osFilter,
-        artifact: null,
-        builtToday: false,
-        execCounts: { passed: 0, failed: 0, inProgress: 0, notStarted: 0 },
-        bugs: new Set(),
-      };
-    });
-
-    // Phase 1 render: show skeleton grid immediately
-    renderGrid(items);
-
-    // ── Step 3: Match artifacts from the main list ─────────────
-    showOverlay('Resolving artifact versions…', 20);
-    const artifactsByNameOs = {};
-    for (const a of allArtifacts) {
-      const k = `${a.name}||${a.release}||${a.os || ''}`;
-      if (!artifactsByNameOs[k]) artifactsByNameOs[k] = [];
-      artifactsByNameOs[k].push(a);
+      if (name) mandatoryKeys.add(`${name}||${osFilter || ''}`);
     }
 
-    // For each item, find matching artifact candidates then resolve versions
-    await Promise.all(items.map(async item => {
-      if (!item.artifactName) return;
-
-      const candidates = allArtifacts.filter(a =>
-        a.name === item.artifactName &&
-        a.release === milestone.release &&
-        (item.osFilter === null || a.os === item.osFilter)
-      );
-
-      if (!candidates.length) return;
-
-      // Try to find a version built today via the versions endpoint
-      for (const c of candidates) {
-        const versions = await api(`/v1/artefacts/${c.id}/versions`).catch(() => []);
-
-        // Look for today's version first
-        const todayVersion = versions.find(v => v.version && v.version.startsWith(today));
-        if (todayVersion) {
-          // Fetch the specific artefact record for today's version to get its status
-          const specific = await api(`/v1/artefacts/${todayVersion.artefact_id}`).catch(() => null);
-          item.artifact  = specific || { ...c, version: todayVersion.version, id: todayVersion.artefact_id };
-          item.builtToday = true;
-          if (!item.artifact.os) item.artifact.os = c.os;
-          return;
-        }
-
-        // Fall back to the milestone's specified version
-        const milestoneVersion = versions.find(v => v.version === item.build.version);
-        if (milestoneVersion) {
-          const specific = await api(`/v1/artefacts/${milestoneVersion.artefact_id}`).catch(() => null);
-          item.artifact = specific || { ...c, version: milestoneVersion.version, id: milestoneVersion.artefact_id };
-          if (!item.artifact.os) item.artifact.os = c.os;
-          return;
-        }
-
-        // Last resort: use the candidate artifact itself
-        item.artifact = c;
-      }
+    // Create items — one per artifact built today
+    const items = todayArtifacts.map(a => ({
+      artifact: a,
+      mandatory: mandatoryKeys.has(`${a.name}||${a.os || ''}`),
+      execCounts: { passed: 0, failed: 0, inProgress: 0, notStarted: 0 },
+      execIds: [],
+      bugs: new Set(),
     }));
 
-    // Phase 2 render: now we have artifact statuses
+    // Phase 1 render: cards with just status colors
     renderGrid(items);
 
-    // Compute approved KPI
-    const matched   = items.filter(i => i.artifact);
-    const builtToday = items.filter(i => i.builtToday).length;
-    const approved  = matched.filter(i => i.artifact.status === 'APPROVED').length;
-    const builtPct  = matched.length > 0 ? Math.round(builtToday / items.length * 100) : null;
-    const appPct    = matched.length > 0 ? Math.round(approved / matched.length * 100) : null;
+    // KPIs: built count + approved
+    const approved = items.filter(i => i.artifact.status === 'APPROVED').length;
+    const appPct   = items.length > 0 ? Math.round(approved / items.length * 100) : null;
+    setKpi('kpi-built', items.length, `artifacts built today (${today.slice(0,4)}-${today.slice(4,6)}-${today.slice(6)})`, null, 'blue');
+    setKpi('kpi-approved', `${approved}/${items.length}`, `${appPct !== null ? appPct + '% ' : ''}approved`, appPct);
 
-    setKpi('kpi-built',
-      `${builtToday}/${items.length}`,
-      `of ${items.length} milestone builds`,
-      builtPct
-    );
-    setKpi('kpi-approved',
-      `${approved}/${matched.length}`,
-      `${appPct !== null ? appPct + '% ' : ''}of matched builds`,
-      appPct
-    );
-
-    // ── Step 4: Fetch test executions ──────────────────────────
-    showOverlay('Fetching test executions…', 55);
-    const uniqueArtIds = [...new Set(items.filter(i => i.artifact).map(i => i.artifact.id))];
-
-    const execsByArtId = {};
-    await Promise.all(uniqueArtIds.map(async id => {
-      const builds = await api(`/v1/artefacts/${id}/builds`).catch(() => []);
-      const execs = builds.flatMap(b => b.test_executions || [])
+    // ── Step 2: Fetch test executions for each artifact ────────
+    showOverlay('Fetching test executions…', 30);
+    await Promise.all(items.map(async item => {
+      const builds = await api(`/v1/artefacts/${item.artifact.id}/builds`).catch(() => []);
+      const execs  = builds
+        .flatMap(b => b.test_executions || [])
         .filter(te => te.test_plan === 'Manual Testing');
-      execsByArtId[id] = execs;
-    }));
-
-    // Attach execution counts to items
-    for (const item of items) {
-      if (!item.artifact) continue;
-      const execs = execsByArtId[item.artifact.id] || [];
+      item.execIds    = execs.map(e => e.id);
       item.execCounts = {
         passed:     execs.filter(e => e.status === 'PASSED').length,
-        failed:     execs.filter(e => e.status === 'FAILED' || e.status === 'ENDED_PREMATURELY').length,
+        failed:     execs.filter(e => ['FAILED', 'ENDED_PREMATURELY'].includes(e.status)).length,
         inProgress: execs.filter(e => e.status === 'IN_PROGRESS').length,
-        notStarted: execs.filter(e => e.status === 'NOT_STARTED' || e.status === 'NOT_TESTED').length,
+        notStarted: execs.filter(e => ['NOT_STARTED', 'NOT_TESTED'].includes(e.status)).length,
       };
-    }
+    }));
 
-    // Phase 3 render: test counts visible on cards
+    // Phase 2 render: test chips visible
     renderGrid(items);
 
-    // Compute test KPIs
-    const totalExecs   = items.reduce((s, i) =>
+    const totalPassed = items.reduce((s, i) => s + i.execCounts.passed, 0);
+    const totalFailed = items.reduce((s, i) => s + i.execCounts.failed, 0);
+    const totalIP     = items.reduce((s, i) => s + i.execCounts.inProgress, 0);
+    const totalExecs  = items.reduce((s, i) =>
       s + Object.values(i.execCounts).reduce((a, b) => a + b, 0), 0);
-    const totalPassed  = items.reduce((s, i) => s + i.execCounts.passed, 0);
-    const totalFailed  = items.reduce((s, i) => s + i.execCounts.failed, 0);
-    const totalIP      = items.reduce((s, i) => s + i.execCounts.inProgress, 0);
-    const passRate     = (totalPassed + totalFailed) > 0
+    const passRate    = (totalPassed + totalFailed) > 0
       ? Math.round(totalPassed / (totalPassed + totalFailed) * 100) : null;
 
-    setKpi('kpi-tests',
-      totalExecs,
+    setKpi('kpi-tests', totalExecs,
       `${totalPassed} pass · ${totalFailed} fail · ${totalIP} in progress`,
       totalExecs > 0 ? Math.round(totalPassed / totalExecs * 100) : null,
       'blue'
@@ -684,27 +612,15 @@ async function loadDashboard(milestone) {
       passRate
     );
 
-    // ── Step 5: Fetch test results for bug extraction ──────────
-    showOverlay('Fetching test results for bug analysis…', 70);
+    // ── Step 3: Bug extraction from test results ───────────────
+    showOverlay('Fetching test results for bug analysis…', 60);
 
-    const allManualExecs = [];
-    for (const item of items) {
-      if (!item.artifact) continue;
-      const execs = execsByArtId[item.artifact.id] || [];
-      for (const ex of execs) {
-        allManualExecs.push({ item, execId: ex.id });
-      }
-    }
-
-    // Deduplicate by execId
     const seenExecIds = new Set();
-    const uniqueExecs = allManualExecs.filter(e => {
-      if (seenExecIds.has(e.execId)) return false;
-      seenExecIds.add(e.execId);
-      return true;
-    });
+    const uniqueExecs = [];
+    for (const item of items)
+      for (const execId of item.execIds)
+        if (!seenExecIds.has(execId)) { seenExecIds.add(execId); uniqueExecs.push({ item, execId }); }
 
-    // Collect all bugs across all test results
     const globalBugs = new Set();
     let doneExecs = 0;
 
@@ -712,45 +628,34 @@ async function loadDashboard(milestone) {
       const results = await api(`/v1/test-executions/${execId}/test-results`).catch(() => []);
       for (const r of results) {
         const comment = r.comment || '';
-
-        // Structured issues
         for (const { issue } of (r.issues || []))
           if (issue?.source === 'launchpad' && issue?.key) {
-            globalBugs.add(issue.key);
-            item.bugs.add(issue.key);
+            globalBugs.add(issue.key); item.bugs.add(issue.key);
           }
-
-        // Bug patterns in comments
-        const patterns = [
+        for (const pat of [
           /bugs\.launchpad\.net\/[^\s)]+\/\+bug\/(\d+)/gi,
           /\bbug\s*#?(\d{5,7})\b/gi,
           /\bLP[:\s]+#?(\d{5,7})\b/gi,
-        ];
-        for (const pat of patterns)
+        ])
           for (const m of comment.matchAll(pat)) {
-            globalBugs.add(m[1]);
-            item.bugs.add(m[1]);
+            globalBugs.add(m[1]); item.bugs.add(m[1]);
           }
       }
       doneExecs++;
-      const pct = 70 + Math.round(doneExecs / (uniqueExecs.length || 1) * 25);
-      showOverlay(`Analysing test results… (${doneExecs}/${uniqueExecs.length})`, pct);
+      showOverlay(
+        `Analysing test results… (${doneExecs}/${uniqueExecs.length})`,
+        60 + Math.round(doneExecs / (uniqueExecs.length || 1) * 35)
+      );
     }));
 
-    // Bug KPI
     const bugCount = globalBugs.size;
-    const bugState = bugCount === 0 ? 'green' : bugCount <= 3 ? 'amber' : 'red';
-    setKpi('kpi-bugs',
-      bugCount,
+    setKpi('kpi-bugs', bugCount,
       bugCount === 0 ? 'No LP bugs referenced' : `LP bug${bugCount > 1 ? 's' : ''} in test comments`,
       bugCount === 0 ? 100 : null,
-      bugState
+      bugCount === 0 ? 'green' : bugCount <= 3 ? 'amber' : 'red'
     );
 
-    showOverlay('Rendering…', 98);
     renderGrid(items);
-
-    // ── Done ───────────────────────────────────────────────────
     document.getElementById('last-update').textContent = fmtTime(new Date());
 
   } catch (err) {
@@ -830,7 +735,7 @@ async function boot() {
   milestones.forEach((ms, i) => {
     const opt = document.createElement('option');
     opt.value = i;
-    opt.textContent = `${ms.release} — ${ms.name} (${ms.date})`;
+    opt.textContent = ms.release.charAt(0).toUpperCase() + ms.release.slice(1);
     select.appendChild(opt);
   });
 
@@ -838,7 +743,7 @@ async function boot() {
     const ms = milestones[+select.value];
     currentMilestone = ms;
     document.getElementById('ms-meta').textContent =
-      `${ms.builds.length} builds · ${ms.date}`;
+      `${ms.builds.length} builds · today ${fmtDate(new Date())}`;
     loadDashboard(ms);
   }
 
