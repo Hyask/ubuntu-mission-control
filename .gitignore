@@ -1,0 +1,4 @@
+node_modules/
+dist/
+.proxy.pid
+.http.pid

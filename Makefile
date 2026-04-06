@@ -1,21 +1,42 @@
-PROXY_PORT  ?= 8765
-HTTP_PORT   ?= 3000
-PROXY_PID_FILE := .proxy.pid
-HTTP_PID_FILE  := .http.pid
+DEV_PORT  ?= 3000
 
-.PHONY: help start stop proxy serve open status clean
+.PHONY: help install dev build serve start stop status clean
 
 help:
 	@echo "Usage:"
-	@echo "  make start   — start proxy + HTTP server, open browser"
-	@echo "  make stop    — stop both background servers"
-	@echo "  make status  — show which servers are running"
-	@echo "  make proxy   — start only the CORS proxy (port $(PROXY_PORT))"
-	@echo "  make serve   — start only the HTTP server (port $(HTTP_PORT))"
-	@echo "  make open    — open the UI in the browser"
-	@echo "  make clean   — remove PID files"
+	@echo "  make install  — install npm dependencies (run once)"
+	@echo "  make dev      — start Vite dev server with hot reload (port $(DEV_PORT))"
+	@echo "  make build    — build optimised production bundle into dist/"
+	@echo "  make serve    — build + preview production bundle (port $(DEV_PORT))"
+	@echo "  make start    — alias for 'make dev'"
+	@echo ""
+	@echo "Legacy (production deployment without Node):"
+	@echo "  make proxy    — start only the CORS proxy (port 8765)"
+	@echo "  make stop     — stop background proxy server"
+	@echo "  make status   — show proxy server status"
+	@echo "  make clean    — remove PID files and dist/"
 
-start: proxy serve open
+# ── Primary workflow ──────────────────────────────────────────
+
+install:
+	npm install
+
+dev:
+	npm run dev
+
+build:
+	npm run build
+
+serve: build
+	npm run preview
+
+start: dev
+
+# ── Legacy: bare proxy for charm/production deployments ───────
+# proxy.py strips the /api prefix that the built app emits.
+
+PROXY_PORT    ?= 8765
+PROXY_PID_FILE := .proxy.pid
 
 proxy:
 	@if [ -f $(PROXY_PID_FILE) ] && kill -0 $$(cat $(PROXY_PID_FILE)) 2>/dev/null; then \
@@ -25,20 +46,6 @@ proxy:
 		echo "Proxy started on http://localhost:$(PROXY_PORT) (PID $$(cat $(PROXY_PID_FILE)))"; \
 	fi
 
-serve:
-	@if [ -f $(HTTP_PID_FILE) ] && kill -0 $$(cat $(HTTP_PID_FILE)) 2>/dev/null; then \
-		echo "HTTP server already running (port $(HTTP_PORT), PID $$(cat $(HTTP_PID_FILE)))"; \
-	else \
-		python3 -m http.server $(HTTP_PORT) --bind 127.0.0.1 >/dev/null 2>&1 & echo $$! > $(HTTP_PID_FILE); \
-		echo "HTTP server started on http://localhost:$(HTTP_PORT) (PID $$(cat $(HTTP_PID_FILE)))"; \
-	fi
-
-open:
-	@sleep 0.5
-	@xdg-open http://localhost:$(HTTP_PORT) 2>/dev/null || \
-	 open     http://localhost:$(HTTP_PORT) 2>/dev/null || \
-	 echo "Open http://localhost:$(HTTP_PORT) in your browser"
-
 stop:
 	@if [ -f $(PROXY_PID_FILE) ]; then \
 		PID=$$(cat $(PROXY_PID_FILE)); \
@@ -47,26 +54,15 @@ stop:
 	else \
 		echo "Proxy PID file not found"; \
 	fi
-	@if [ -f $(HTTP_PID_FILE) ]; then \
-		PID=$$(cat $(HTTP_PID_FILE)); \
-		kill $$PID 2>/dev/null && echo "HTTP server stopped (PID $$PID)" || echo "HTTP server was not running"; \
-		rm -f $(HTTP_PID_FILE); \
-	else \
-		echo "HTTP server PID file not found"; \
-	fi
 
 status:
 	@if [ -f $(PROXY_PID_FILE) ] && kill -0 $$(cat $(PROXY_PID_FILE)) 2>/dev/null; then \
-		echo "Proxy      : running on http://localhost:$(PROXY_PORT) (PID $$(cat $(PROXY_PID_FILE)))"; \
+		echo "Proxy: running on http://localhost:$(PROXY_PORT) (PID $$(cat $(PROXY_PID_FILE)))"; \
 	else \
-		echo "Proxy      : stopped"; \
-	fi
-	@if [ -f $(HTTP_PID_FILE) ] && kill -0 $$(cat $(HTTP_PID_FILE)) 2>/dev/null; then \
-		echo "HTTP server: running on http://localhost:$(HTTP_PORT) (PID $$(cat $(HTTP_PID_FILE)))"; \
-	else \
-		echo "HTTP server: stopped"; \
+		echo "Proxy: stopped"; \
 	fi
 
 clean:
-	@rm -f $(PROXY_PID_FILE) $(HTTP_PID_FILE)
-	@echo "PID files removed"
+	@rm -f $(PROXY_PID_FILE)
+	@rm -rf dist/
+	@echo "Cleaned PID files and dist/"

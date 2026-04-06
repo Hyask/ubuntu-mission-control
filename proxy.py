@@ -47,7 +47,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
         self._proxy("DELETE")
 
     def _proxy(self, method):
-        url = API_BASE + self.path
+        # Strip leading /api prefix emitted by the Vite-built app
+        path = self.path[4:] if self.path.startswith('/api') else self.path
+        url = API_BASE + path
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length) if length else None
 
