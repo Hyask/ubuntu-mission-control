@@ -182,6 +182,7 @@
     {refreshInterval}
     {countdown}
     isLoading={loadPhase !== null}
+    productCount={products.length}
     {onMilestoneChange}
     onAutoRefreshToggle={onAutoRefreshToggle}
     {onIntervalChange}

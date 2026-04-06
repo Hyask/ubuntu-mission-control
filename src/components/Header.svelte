@@ -11,6 +11,7 @@
     refreshInterval  = 120,
     countdown        = null,
     isLoading        = false,
+    productCount     = null,
     onMilestoneChange   = () => {},
     onAutoRefreshToggle = () => {},
     onIntervalChange    = () => {},
@@ -47,7 +48,7 @@
     {/if}
     {#if selectedRelease}
       <span class="milestone-meta">
-        {selectedRelease.builds.length} builds · {todayDisplay}
+        {productCount !== null ? productCount : selectedRelease.builds.length} builds · {todayDisplay}
       </span>
     {/if}
   </div>
