@@ -19,14 +19,18 @@
     : 'age'
   )
 
-  // Interpolate blue CSS vars for age-based cards (hue 215).
-  function ageStyle(ageDays) {
-    const t = (ageDays ?? 0) / 7          // 0 = fresh, 1 = oldest-before-stale
+  // Always compute age CSS vars — used by both the card colouring and the
+  // bottom strip/pill, including on approved/failed cards.
+  function ageVars(ageDays) {
+    if (ageDays === null || ageDays > 7) {
+      return '--age-border:#2a2a2a; --age-bg:#0c0c10; --age-badge:transparent; --age-text:#3a3a3a'
+    }
+    const t = ageDays / 7        // 0 = fresh, 1 = oldest-before-stale
     const h = 215
-    const borderL  = Math.round(56 - t * 30)      // 56% → 26%
-    const bgL      = Math.round(14 - t *  7)      // 14% → 7%
-    const badgeBgL = Math.round(18 - t *  9)      // 18% → 9%
-    const textL    = Math.round(68 - t * 20)      // 68% → 48%
+    const borderL  = Math.round(56 - t * 30)   // 56% → 26%
+    const bgL      = Math.round(14 - t *  7)   // 14% → 7%
+    const badgeBgL = Math.round(18 - t *  9)   // 18% → 9%
+    const textL    = Math.round(68 - t * 20)   // 68% → 48%
     return [
       `--age-border: hsl(${h},80%,${borderL}%)`,
       `--age-bg:     hsl(${h},70%,${bgL}%)`,
@@ -35,7 +39,13 @@
     ].join('; ')
   }
 
-  let cardStyle = $derived(cardClass === 'age' ? ageStyle(product.ageDays) : '')
+  let cardStyle = $derived(ageVars(product.ageDays))
+
+  let ageLabel = $derived(
+    product.ageDays === null  ? null
+    : product.ageDays === 0   ? 'today'
+    : `${product.ageDays}d`
+  )
 
   let hasTests = $derived(
     product.tests.passed + product.tests.failed +
@@ -71,6 +81,9 @@
   </div>
 
   <div class="version">{product.version}</div>
+  {#if ageLabel !== null}
+    <span class="age-label">{ageLabel}</span>
+  {/if}
 </div>
 
 <style>
@@ -78,9 +91,23 @@
     border: 1px solid var(--border-faint);
     border-radius: 5px;
     padding: 0.65rem 0.85rem;
+    padding-bottom: 0.85rem;
     position: relative;
     background: var(--bg-panel);
+    overflow: hidden;
     transition: border-color 0.3s, background 0.3s;
+  }
+
+  /* Bottom accent strip — age colour on all cards */
+  .card::before {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--age-border);
+    opacity: 0.9;
   }
 
   .card.approved { border-color: var(--green-border); background: var(--green-bg); }
@@ -165,5 +192,17 @@
     font-family: monospace;
     color: #444;
     margin-top: 0.2rem;
+  }
+
+  /* Age pill — bottom-right corner */
+  .age-label {
+    position: absolute;
+    bottom: 0.35rem;
+    right: 0.55rem;
+    font-size: 0.6rem;
+    font-family: monospace;
+    font-weight: 700;
+    color: var(--age-text);
+    letter-spacing: 0.03em;
   }
 </style>
