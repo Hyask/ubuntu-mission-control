@@ -1,4 +1,4 @@
-import { todayStr, artifactTypeLabel } from './utils.js'
+import { todayStr, artifactTypeLabel, versionAgeDays } from './utils.js'
 import { buildMandatorySet } from './milestones.js'
 import { fetchBuilds, fetchTestResults } from '../api/client.js'
 
@@ -22,6 +22,7 @@ export function buildProductItems(artefacts, milestone) {
       status:      a.status ?? null,
       mandatory:   mandatoryKeys.has(`${a.name}||${a.os ?? ''}`),
       builtToday:  a.version?.startsWith(today) ?? false,
+      ageDays:     versionAgeDays(a.version),
       tests:       { passed: 0, failed: 0, inProgress: 0, notStarted: 0 },
       bugs:        [],
       execIds:     [],

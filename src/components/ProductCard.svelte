@@ -10,14 +10,32 @@
 
   let badgeLabel = $derived(STATUS_LABELS[product.status] ?? '—')
 
-  // Stale (not built today): only show green/red for reviewed artifacts,
-  // everything else collapses to grey.
+  // Approved/Failed override everything. Otherwise colour by age:
+  // 0–7 days = blue gradient (bright → dark), >7 days = grey.
   let cardClass = $derived(
     product.status === 'APPROVED'           ? 'approved'
     : product.status === 'MARKED_AS_FAILED' ? 'failed'
-    : product.builtToday                    ? 'pending'
-    : 'stale'
+    : (product.ageDays ?? 99) > 7          ? 'stale'
+    : 'age'
   )
+
+  // Interpolate blue CSS vars for age-based cards (hue 215).
+  function ageStyle(ageDays) {
+    const t = (ageDays ?? 0) / 7          // 0 = fresh, 1 = oldest-before-stale
+    const h = 215
+    const borderL  = Math.round(56 - t * 30)      // 56% → 26%
+    const bgL      = Math.round(14 - t *  7)      // 14% → 7%
+    const badgeBgL = Math.round(18 - t *  9)      // 18% → 9%
+    const textL    = Math.round(68 - t * 20)      // 68% → 48%
+    return [
+      `--age-border: hsl(${h},80%,${borderL}%)`,
+      `--age-bg:     hsl(${h},70%,${bgL}%)`,
+      `--age-badge:  hsl(${h},60%,${badgeBgL}%)`,
+      `--age-text:   hsl(${h},80%,${textL}%)`,
+    ].join('; ')
+  }
+
+  let cardStyle = $derived(cardClass === 'age' ? ageStyle(product.ageDays) : '')
 
   let hasTests = $derived(
     product.tests.passed + product.tests.failed +
@@ -25,7 +43,7 @@
   )
 </script>
 
-<div class="card {cardClass}" class:mandatory={product.mandatory}>
+<div class="card {cardClass}" class:mandatory={product.mandatory} style={cardStyle}>
   <div class="name" title={product.name}>{product.displayName}</div>
   <div class="meta">{product.type} · {product.arch}</div>
 
@@ -67,7 +85,7 @@
 
   .card.approved { border-color: var(--green-border); background: var(--green-bg); }
   .card.failed   { border-color: var(--red-border);   background: var(--red-bg);   }
-  .card.pending  { border-color: var(--amber-border); background: var(--amber-bg); }
+  .card.age      { border-color: var(--age-border);   background: var(--age-bg);   }
   .card.stale    { border-color: #252525; background: #0c0c10; opacity: 0.6; }
 
   .card.mandatory::after {
@@ -118,7 +136,7 @@
 
   .badge.approved { background: var(--green-border); color: #5ddb5d; }
   .badge.failed   { background: var(--red-border);   color: var(--red); }
-  .badge.pending  { background: #2a2a00; color: var(--amber); }
+  .badge.age      { background: var(--age-badge);    color: var(--age-text); }
   .badge.stale    { background: transparent; color: #3a3a3a; }
 
   /* Test chips */

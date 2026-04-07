@@ -3,6 +3,19 @@ export function todayStr() {
   return new Date().toISOString().slice(0, 10).replace(/-/g, '')
 }
 
+/**
+ * Returns the number of days between the artifact version date and today.
+ * Version format is YYYYMMDD or YYYYMMDD.N — anything else returns null.
+ */
+export function versionAgeDays(version) {
+  const base = (version ?? '').slice(0, 8)
+  if (!/^\d{8}$/.test(base)) return null
+  const built = new Date(+base.slice(0, 4), +base.slice(4, 6) - 1, +base.slice(6, 8))
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Math.max(0, Math.floor((today - built) / 86400000))
+}
+
 /** Formats a Date as HH:MM:SS */
 export function fmtTime(d) {
   return d.toLocaleTimeString('en-GB', {
