@@ -1,4 +1,4 @@
-import { todayStr, artifactTypeLabel, versionAgeDays } from './utils.js'
+import { todayStr, artifactTypeLabel, versionAgeDays, extractArch } from './utils.js'
 import { buildMandatorySet } from './milestones.js'
 import { fetchBuilds, fetchTestResults } from '../api/client.js'
 
@@ -16,7 +16,7 @@ export function buildProductItems(artefacts, milestone) {
       id:          a.id,
       name:        a.name,
       displayName: a.os || artifactTypeLabel(a.name, a.release),
-      arch:        a.architecture || '',
+      arch:        a.architecture || extractArch(a.name),
       type:        artifactTypeLabel(a.name, a.release),
       version:     a.version,
       status:      a.status ?? null,

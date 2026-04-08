@@ -31,6 +31,15 @@ export function fmtDate(d) {
 }
 
 /**
+ * Extracts the CPU architecture from an artifact filename.
+ * e.g. "resolute-live-server-amd64.iso" → "amd64"
+ */
+export function extractArch(name) {
+  const m = (name || '').match(/[-_](amd64|arm64(?:\+[\w]+)?|armhf|ppc64el|riscv64|s390x)(?:[-+.]|$)/)
+  return m ? m[1] : ''
+}
+
+/**
  * Derives a human-readable type label from an artifact filename.
  * e.g. "resolute-live-server-amd64.iso" → "live-server"
  */
