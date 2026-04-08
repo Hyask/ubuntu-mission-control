@@ -21,21 +21,23 @@
 
   // Always compute age CSS vars — used by both the card colouring and the
   // bottom strip/pill, including on approved/failed cards.
+  // Hue sweeps green(140) → orange-red(30) as builds age, giving a wide
+  // traffic-light range rather than a subtle single-hue gradient.
   function ageVars(ageDays) {
     if (ageDays === null || ageDays > 7) {
-      return '--age-border:#2a2a2a; --age-bg:#0c0c10; --age-badge:transparent; --age-text:#3a3a3a'
+      return '--age-border:#2a2a2a; --age-bg:#0c0c10; --age-badge:transparent; --age-text:#555'
     }
     const t = ageDays / 7        // 0 = fresh, 1 = oldest-before-stale
-    const h = 215
-    const borderL  = Math.round(56 - t * 30)   // 56% → 26%
-    const bgL      = Math.round(14 - t *  7)   // 14% → 7%
-    const badgeBgL = Math.round(18 - t *  9)   // 18% → 9%
-    const textL    = Math.round(68 - t * 20)   // 68% → 48%
+    const h = Math.round(140 - t * 110)   // green(140) → orange-red(30)
+    const borderL  = Math.round(60 - t * 20)   // 60% → 40%
+    const bgL      = Math.round(18 - t * 10)   // 18% → 8%
+    const badgeBgL = Math.round(22 - t * 12)   // 22% → 10%
+    const textL    = Math.round(78 - t * 18)   // 78% → 60%
     return [
-      `--age-border: hsl(${h},80%,${borderL}%)`,
+      `--age-border: hsl(${h},85%,${borderL}%)`,
       `--age-bg:     hsl(${h},70%,${bgL}%)`,
       `--age-badge:  hsl(${h},60%,${badgeBgL}%)`,
-      `--age-text:   hsl(${h},80%,${textL}%)`,
+      `--age-text:   hsl(${h},85%,${textL}%)`,
     ].join('; ')
   }
 
@@ -164,7 +166,7 @@
   .badge.approved { background: var(--green-border); color: #5ddb5d; }
   .badge.failed   { background: var(--red-border);   color: var(--red); }
   .badge.age      { background: var(--age-badge);    color: var(--age-text); }
-  .badge.stale    { background: transparent; color: #3a3a3a; }
+  .badge.stale    { background: transparent; color: #666; }
 
   /* Test chips */
   .tests {
@@ -185,12 +187,12 @@
   .chip.fail { background: #4d1a1a; color: var(--red); }
   .chip.prog { background: #1a2d4d; color: var(--blue); }
   .chip.skip { background: #2a2a2a; color: var(--text-muted); }
-  .chip.none { color: #444; font-style: italic; font-size: 0.65rem; }
+  .chip.none { color: #666; font-style: italic; font-size: 0.65rem; }
 
   .version {
     font-size: 0.6rem;
     font-family: monospace;
-    color: #444;
+    color: #666;
     margin-top: 0.2rem;
   }
 
