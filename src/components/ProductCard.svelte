@@ -17,6 +17,17 @@
     product.tests.passed + product.tests.failed +
     product.tests.inProgress + product.tests.notStarted > 0
   )
+
+  let isStale = $derived((product.ageDays ?? 999) > 7)
+
+  // Orange-red at 8d fading to grey at 28d+
+  let staleColor = $derived.by(() => {
+    if (!isStale) return null
+    const t = Math.min(((product.ageDays ?? 999) - 7) / 21, 1)
+    const s = Math.round(78 - t * 65)
+    const l = Math.round(48 - t * 18)
+    return `hsl(30,${s}%,${l}%)`
+  })
 </script>
 
 <button
@@ -39,10 +50,14 @@
       {#if product.tests.notStarted}<span class="tc skip">○{product.tests.notStarted}</span>{/if}
     {/if}
   </div>
+  {#if isStale && product.ageDays !== null}
+    <span class="age-badge" style="color:{staleColor}">{product.ageDays}d</span>
+  {/if}
 </button>
 
 <style>
   .chip {
+    position: relative;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -130,4 +145,15 @@
   .tc.fail { color: var(--red); }
   .tc.prog { color: var(--blue); }
   .tc.skip { color: #555; }
+
+  .age-badge {
+    position: absolute;
+    bottom: 0.3rem;
+    right: 0.45rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    font-family: monospace;
+    line-height: 1;
+    pointer-events: none;
+  }
 </style>

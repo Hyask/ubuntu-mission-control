@@ -28,6 +28,8 @@
         const t     = Math.min(age === 999 ? 1 : age / 7, 1)
         const h     = Math.round(140 - t * 110)
         const color = age === 999 ? '#3a3a3a' : `hsl(${h},78%,48%)`
+        // Sort stale items newest → oldest
+        if (age === 999) items.sort((a, b) => (a.ageDays ?? 999) - (b.ageDays ?? 999))
         return { label, age, items, color }
       })
   }
