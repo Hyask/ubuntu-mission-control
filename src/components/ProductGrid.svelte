@@ -124,7 +124,7 @@
 
   .rail-count {
     font-size: 0.68rem;
-    color: #484848;
+    color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }
 
@@ -134,7 +134,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
-    border-left: 1px solid #1e1e1e;
+    border-left: 1px solid var(--border);
     padding: 0.35rem 0 0.35rem 0.75rem;
     min-height: 84px;
   }

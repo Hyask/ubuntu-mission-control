@@ -1,4 +1,5 @@
 <script>
+  import { onMount } from 'svelte'
   import RefreshControl from './RefreshControl.svelte'
 
   let {
@@ -19,6 +20,20 @@
   } = $props()
 
   let selectedRelease = $derived(releases[selectedIndex])
+
+  let isDark = $state(true)
+
+  onMount(() => {
+    isDark = localStorage.getItem('theme') !== 'light'
+    document.documentElement.dataset.theme = isDark ? 'dark' : 'light'
+  })
+
+  function toggleTheme() {
+    isDark = !isDark
+    const theme = isDark ? 'dark' : 'light'
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem('theme', theme)
+  }
 </script>
 
 <header class="header">
@@ -65,6 +80,9 @@
       {onIntervalChange}
       {onManualRefresh}
     />
+    <button class="theme-toggle" onclick={toggleTheme} title="{isDark ? 'Switch to light mode' : 'Switch to dark mode'}">
+      {isDark ? '☀' : '☾'}
+    </button>
     <div class="clock">{clockStr}</div>
   </div>
 </header>
@@ -99,7 +117,7 @@
   }
 
   .sep {
-    color: #444;
+    color: var(--border-strong);
     user-select: none;
     flex-shrink: 0;
   }
@@ -112,7 +130,7 @@
 
   .milestone select {
     background: var(--bg-raised);
-    border: 1px solid #333;
+    border: 1px solid var(--border-mid);
     color: var(--text);
     padding: 0.2rem 0.55rem;
     border-radius: 3px;
@@ -140,11 +158,27 @@
     gap: 1.25rem;
   }
 
+  .theme-toggle {
+    background: none;
+    border: 1px solid var(--border-strong);
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    line-height: 1;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .theme-toggle:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+
   .clock {
     font-size: 1.32rem;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
-    color: #ccc;
+    color: var(--text-normal);
     min-width: 6rem;
     text-align: right;
   }

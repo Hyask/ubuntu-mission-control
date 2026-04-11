@@ -20,6 +20,50 @@
   --amber-border: #5c4a00;
   --red-bg:     #1f0d0d;
   --red-border: #5c1a1a;
+
+  /* Semantic grey aliases — used in components instead of hardcoded values */
+  --text-bright:   #dddddd;
+  --text-normal:   #cccccc;
+  --text-soft:     #bbbbbb;
+  --border-strong: #444444;
+  --border-mid:    #333333;
+  --border-subtle: #252525;
+  --surface-faint: rgba(255,255,255,0.04);
+  --surface-hover: rgba(255,255,255,0.08);
+  --surface-shade: rgba(0,0,0,0.15);
+}
+
+/* ── Light mode overrides ────────────────────────────────────── */
+html[data-theme="light"] {
+  --bg-base:    #f2f2ef;
+  --bg-panel:   #ffffff;
+  --bg-raised:  #e8e8e5;
+  --border:     #d0d0cc;
+  --border-faint: #e0e0dc;
+  --text:       #111111;
+  --text-muted: #666666;
+  --text-dim:   #999999;
+  --green:      #1a7a2e;
+  --amber:      #c07800;
+  --red:        #cc2222;
+  --blue:       #0055bb;
+
+  --green-bg:     #e6f4ea;
+  --green-border: #2e7d32;
+  --amber-bg:     #fef9e7;
+  --amber-border: #e65100;
+  --red-bg:       #fce8e6;
+  --red-border:   #b71c1c;
+
+  --text-bright:   #111111;
+  --text-normal:   #333333;
+  --text-soft:     #555555;
+  --border-strong: #aaaaaa;
+  --border-mid:    #c0c0c0;
+  --border-subtle: #d8d8d8;
+  --surface-faint: rgba(0,0,0,0.03);
+  --surface-hover: rgba(0,0,0,0.06);
+  --surface-shade: rgba(0,0,0,0.06);
 }
 
 /* ── Reset ───────────────────────────────────────────────────── */

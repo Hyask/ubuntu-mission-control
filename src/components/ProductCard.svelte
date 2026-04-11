@@ -96,8 +96,8 @@
     height: 74px;
     padding: 0.5rem 0.875rem 0.5rem 1rem;
     border-radius: 7px;
-    border: 1px solid #252525;
-    border-left: 4px solid #333;
+    border: 1px solid var(--border-subtle);
+    border-left: 4px solid var(--border-mid);
     background: var(--bg-panel);
     cursor: pointer;
     text-align: left;
@@ -127,7 +127,7 @@
     border-color: var(--red-border);
     border-left-color: var(--red);
   }
-  .chip.default  { border-left-color: #3a3a3a; }
+  .chip.default  { border-left-color: var(--border-mid); }
 
   .flavor-icon {
     width: 20px;
@@ -148,7 +148,7 @@
   .chip-name {
     font-size: 1.2rem;
     font-weight: 700;
-    color: #ddd;
+    color: var(--text-bright);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -172,7 +172,7 @@
 
   .chip-arch {
     font-size: 1rem;
-    color: #555;
+    color: var(--text-dim);
     flex-shrink: 0;
     margin-right: 0.18rem;
   }
@@ -187,7 +187,7 @@
   .tc.pass { color: #5ddb5d; }
   .tc.fail { color: var(--red); }
   .tc.prog { color: var(--blue); }
-  .tc.skip { color: #555; }
+  .tc.skip { color: var(--text-dim); }
 
   .age-badge {
     position: absolute;

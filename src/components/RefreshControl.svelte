@@ -102,7 +102,7 @@
   .toggle-track {
     width: 28px;
     height: 16px;
-    background: #333;
+    background: var(--border-mid);
     border-radius: 8px;
     position: relative;
     transition: background 0.2s;
@@ -136,7 +136,7 @@
   /* Interval select */
   .interval-select {
     background: var(--bg-raised);
-    border: 1px solid #333;
+    border: 1px solid var(--border-mid);
     color: var(--text);
     padding: 0.2rem 0.4rem;
     border-radius: 3px;
@@ -147,8 +147,8 @@
   /* Refresh button */
   .refresh-btn {
     background: var(--bg-raised);
-    border: 1px solid #444;
-    color: #ccc;
+    border: 1px solid var(--border-strong);
+    color: var(--text-normal);
     padding: 0.3rem 0.8rem;
     border-radius: 3px;
     cursor: pointer;

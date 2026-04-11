@@ -305,7 +305,7 @@
     display: flex;
     flex-direction: column;
     border-radius: 11px;
-    border: 1px solid #2a2a2a;
+    border: 1px solid var(--border-subtle);
     background: var(--bg-panel);
     overflow: hidden;
     box-shadow: 0 20px 60px rgba(0,0,0,0.6);
@@ -325,7 +325,7 @@
   .modal-header.approved { background: var(--green-bg);  border-bottom-color: var(--green-border); }
   .modal-header.failed   { background: var(--red-bg);    border-bottom-color: var(--red-border); }
   .modal-header.age      { background: var(--age-bg);    border-bottom-color: var(--age-border); }
-  .modal-header.stale    { background: #0c0c10; border-bottom-color: #252525; }
+  .modal-header.stale    { background: var(--bg-base); border-bottom-color: var(--border-subtle); }
 
   .header-left  { display: flex; flex-direction: row; align-items: center; gap: 0.88rem; min-width: 0; }
 
@@ -342,7 +342,7 @@
   .modal-name {
     font-size: 1.41rem;
     font-weight: 700;
-    color: #ddd;
+    color: var(--text-bright);
     display: flex;
     align-items: center;
     gap: 0.62rem;
@@ -396,13 +396,13 @@
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    background: #222;
+    background: var(--bg-raised);
     color: var(--text-dim);
   }
   .hbadge.approved { background: var(--green-border); color: #5ddb5d; }
   .hbadge.failed   { background: var(--red-border);   color: var(--red); }
   .hbadge.age      { background: var(--age-badge);    color: var(--age-text); }
-  .hbadge.stale    { background: transparent; color: #666; }
+  .hbadge.stale    { background: transparent; color: var(--text-muted); }
 
   .age-chip {
     font-size: 1rem;
@@ -421,7 +421,7 @@
     line-height: 1;
     transition: color 0.15s, background 0.15s;
   }
-  .close-btn:hover { color: #ddd; background: rgba(255,255,255,0.08); }
+  .close-btn:hover { color: var(--text-bright); background: var(--surface-hover); }
 
   /* ── Details strip ────────────────────────────────────────── */
   .details-strip {
@@ -449,7 +449,7 @@
   }
   .dv {
     font-size: 1.06rem;
-    color: #ccc;
+    color: var(--text-normal);
     display: flex;
     align-items: center;
     gap: 0.39rem;
@@ -488,15 +488,15 @@
     text-transform: uppercase;
     color: var(--text-dim);
     padding: 0.62rem 1.14rem;
-    background: rgba(255,255,255,0.04);
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+    background: var(--surface-faint);
+    border-bottom: 1px solid var(--border-faint);
   }
 
   .build-status { color: var(--accent); }
 
   .no-exec, .no-results {
     font-size: 1.06rem;
-    color: #555;
+    color: var(--text-dim);
     font-style: italic;
     padding: 0.77rem 1.14rem;
   }
@@ -513,7 +513,7 @@
     justify-content: space-between;
     gap: 0.77rem;
     padding: 0.7rem 1.14rem;
-    background: rgba(0,0,0,0.15);
+    background: var(--surface-shade);
   }
 
   .exec-header-left {
@@ -528,19 +528,19 @@
   .exec-plan {
     font-size: 1.06rem;
     font-weight: 600;
-    color: #bbb;
+    color: var(--text-soft);
   }
 
   .exec-env {
     font-size: 1rem;
-    color: #666;
+    color: var(--text-muted);
     font-style: italic;
   }
 
   .exec-user {
     font-size: 1rem;
-    color: #aaa;
-    background: rgba(255,255,255,0.05);
+    color: var(--text-muted);
+    background: var(--surface-faint);
     padding: 0.05em 0.35em;
     border-radius: 2px;
   }
@@ -565,7 +565,7 @@
   .exec-passed  { background: #1a4d1a; color: #5ddb5d; }
   .exec-failed  { background: #4d1a1a; color: var(--red); }
   .exec-progress{ background: #1a2d4d; color: var(--blue); }
-  .exec-pending { background: #2a2a2a; color: #666; }
+  .exec-pending { background: var(--bg-raised); color: var(--text-muted); }
 
   /* ── Results table ────────────────────────────────────────── */
   .results-table {
@@ -584,14 +584,14 @@
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: #555;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border-faint);
   }
   .results-table td {
     padding: 0.44rem 1.14rem;
     vertical-align: top;
-    border-bottom: 1px solid rgba(255,255,255,0.03);
-    color: #bbb;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-soft);
   }
   .results-table tr:last-child td { border-bottom: none; }
 
@@ -607,12 +607,12 @@
   }
   .res-badge.res-pass { background: #1a4d1a; color: #5ddb5d; }
   .res-badge.res-fail { background: #4d1a1a; color: var(--red); }
-  .res-badge.res-other { background: #2a2a2a; color: #666; }
+  .res-badge.res-other { background: var(--bg-raised); color: var(--text-muted); }
 
-  .result-tester { color: #aaa; white-space: nowrap; font-size: 1rem; }
-  .result-name   { color: #ccc; }
+  .result-tester { color: var(--text-muted); white-space: nowrap; font-size: 1rem; }
+  .result-name   { color: var(--text-normal); }
   .result-detail { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 0.44rem; }
-  .result-comment { color: #999; font-style: italic; }
+  .result-comment { color: var(--text-muted); font-style: italic; }
 
   /* ── Shared chips / tags ──────────────────────────────────── */
   .chip-pass { background: #1a4d1a; color: #5ddb5d; padding: 0.1em 0.35em; border-radius: 2px; font-size: 1rem; font-weight: 700; }
@@ -632,5 +632,5 @@
   .bug-tag.small { font-size: 0.88rem; }
 
   .mono  { font-family: monospace; }
-  .dim   { color: #555; }
+  .dim   { color: var(--text-dim); }
 </style>
