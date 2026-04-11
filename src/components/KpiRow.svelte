@@ -2,8 +2,8 @@
   import KpiCard from './KpiCard.svelte'
   import { pctColor, fmtDate } from '../lib/utils.js'
 
-  /** @type {{ kpis: import('../lib/processor.js').Kpis }} */
-  let { kpis } = $props()
+  /** @type {{ kpis: import('../lib/processor.js').Kpis, deltas?: object|null }} */
+  let { kpis, deltas = null } = $props()
 
   const today = fmtDate(new Date())
 </script>
@@ -15,6 +15,7 @@
     sub="artifacts built on {today}"
     pct={null}
     color="blue"
+    delta={deltas?.builds ?? 0}
   />
   <KpiCard
     label="Approved"
@@ -22,6 +23,7 @@
     sub="{kpis.approved.pct !== null ? kpis.approved.pct + '% ' : ''}approved"
     pct={kpis.approved.pct}
     color={pctColor(kpis.approved.pct)}
+    delta={deltas?.approved ?? 0}
   />
   <KpiCard
     label="Test Executions"
@@ -29,6 +31,7 @@
     sub="{kpis.tests.passed} pass · {kpis.tests.failed} fail · {kpis.tests.inProgress} in progress"
     pct={kpis.tests.total > 0 ? Math.round(kpis.tests.passed / kpis.tests.total * 100) : null}
     color="blue"
+    delta={deltas?.tests ?? 0}
   />
   <KpiCard
     label="Pass Rate"
@@ -36,6 +39,7 @@
     sub="passed / (passed + failed)"
     pct={kpis.passRate.pct}
     color={pctColor(kpis.passRate.pct)}
+    delta={deltas?.passed ?? 0}
   />
   <KpiCard
     label="Open Bugs"
@@ -43,6 +47,7 @@
     sub={kpis.bugs === 0 ? 'No LP bugs referenced' : `LP bug${kpis.bugs !== 1 ? 's' : ''} in test comments`}
     pct={kpis.bugs === 0 ? 100 : null}
     color={kpis.bugs === 0 ? 'green' : kpis.bugs <= 3 ? 'amber' : 'red'}
+    delta={deltas?.bugs ?? 0}
   />
 </div>
 

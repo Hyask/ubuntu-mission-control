@@ -18,7 +18,8 @@
   let selectedIndex = $state(0)
 
   // ── Data ──────────────────────────────────────────────────────
-  let products = $state([])
+  let products   = $state([])
+  let kpiDeltas  = $state(null)
   let kpis = $derived(products.length > 0 ? computeKpis(products) : null)
 
   // ── Load state ────────────────────────────────────────────────
@@ -94,10 +95,25 @@
 
       // Merge: background diff preserves object identity for unchanged cards
       if (background) {
+        const prevKpis = products.length > 0 ? computeKpis(products) : null
         const { products: merged, changed } = diffProducts(products, items)
-        if (changed) products = merged
+        if (changed) {
+          products = merged
+          if (prevKpis) {
+            const nextKpis = computeKpis(merged)
+            const dBuilds    = nextKpis.buildsToday - prevKpis.buildsToday
+            const dApproved  = nextKpis.approved.count - prevKpis.approved.count
+            const dTests     = nextKpis.tests.total - prevKpis.tests.total
+            const dPassed    = nextKpis.tests.passed - prevKpis.tests.passed
+            const dBugs      = nextKpis.bugs - prevKpis.bugs
+            if (dBuilds || dApproved || dTests || dPassed || dBugs) {
+              kpiDeltas = { builds: dBuilds, approved: dApproved, tests: dTests, passed: dPassed, bugs: dBugs }
+            }
+          }
+        }
       } else {
-        products = [...items]
+        products  = [...items]
+        kpiDeltas = null
       }
 
       lastUpdated = fmtTime(new Date())
@@ -194,7 +210,7 @@
   />
 
   {#if kpis}
-    <KpiRow {kpis} />
+    <KpiRow {kpis} deltas={kpiDeltas} />
   {/if}
 
   <div class="grid-wrap">

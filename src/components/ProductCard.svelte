@@ -57,6 +57,16 @@
     const l = Math.round(48 - t * 18)
     return `hsl(30,${s}%,${l}%)`
   })
+
+  // Glow color by change kind
+  const GLOW_COLORS = {
+    approved: '80, 200, 80',
+    failed:   '220, 60, 60',
+    tests:    '80, 160, 255',
+    status:   '255, 200, 60',
+    new:      '80, 160, 255',
+  }
+  let glowColor = $derived(GLOW_COLORS[product._changeKind] ?? '80, 160, 255')
 </script>
 
 <button
@@ -64,6 +74,11 @@
   {onclick}
   title="{product.name} · {product.version}"
 >
+  {#key product._changedAt}
+    {#if product._changedAt}
+      <div class="glow-ring" style="--glow-rgb: {glowColor}"></div>
+    {/if}
+  {/key}
   <div class="chip-top">
     <span class="chip-name">{product.displayName}</span>
     {#if statusIcon}
@@ -198,5 +213,24 @@
     font-family: monospace;
     line-height: 1;
     pointer-events: none;
+  }
+
+  /* Change glow-flash overlay — fades out over 15 s */
+  .glow-ring {
+    position: absolute;
+    inset: -1px;
+    border-radius: 7px;
+    pointer-events: none;
+    box-shadow: 0 0 0 3px rgba(var(--glow-rgb), 0.85),
+                0 0 18px 4px rgba(var(--glow-rgb), 0.5);
+    animation: glow-fade 15s ease-out forwards;
+    z-index: 2;
+  }
+
+  @keyframes glow-fade {
+    0%   { opacity: 1; }
+    20%  { opacity: 0.85; }
+    60%  { opacity: 0.4; }
+    100% { opacity: 0; }
   }
 </style>

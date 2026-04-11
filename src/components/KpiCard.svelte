@@ -1,11 +1,20 @@
 <script>
-  /** @type {{ label: string, value: string|number, sub: string, pct: number|null, color?: string }} */
-  let { label, value, sub, pct, color = 'neutral' } = $props()
+  /** @type {{ label: string, value: string|number, sub: string, pct: number|null, color?: string, delta?: number }} */
+  let { label, value, sub, pct, color = 'neutral', delta = 0 } = $props()
 </script>
 
 <div class="kpi" class:green={color === 'green'} class:amber={color === 'amber'} class:red={color === 'red'} class:blue={color === 'blue'}>
   <div class="label">{label}</div>
-  <div class="value">{value}</div>
+  <div class="value-row">
+    <div class="value">{value}</div>
+    {#key delta}
+      {#if delta !== 0}
+        <span class="delta" class:delta-pos={delta > 0} class:delta-neg={delta < 0}>
+          {delta > 0 ? '+' : ''}{delta}
+        </span>
+      {/if}
+    {/key}
+  </div>
   <div class="sub">{sub}</div>
   <div class="bar">
     <div class="bar-fill" style="width: {pct ?? 0}%"></div>
@@ -29,6 +38,12 @@
     margin-bottom: 0.4rem;
   }
 
+  .value-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+
   .value {
     font-size: 3rem;
     font-weight: 700;
@@ -36,6 +51,33 @@
     font-variant-numeric: tabular-nums;
     color: var(--text-muted);
     transition: color 0.3s;
+  }
+
+  .delta {
+    font-size: 1.1rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    padding: 0.1em 0.4em;
+    border-radius: 4px;
+    animation: delta-pop 12s ease-out forwards;
+    flex-shrink: 0;
+  }
+
+  .delta-pos {
+    color: #5ddb5d;
+    background: rgba(93, 219, 93, 0.12);
+  }
+
+  .delta-neg {
+    color: var(--red);
+    background: rgba(220, 60, 60, 0.12);
+  }
+
+  @keyframes delta-pop {
+    0%   { opacity: 1; transform: scale(1.15); }
+    8%   { opacity: 1; transform: scale(1); }
+    60%  { opacity: 0.7; }
+    100% { opacity: 0; }
   }
 
   .sub {

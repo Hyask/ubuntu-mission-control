@@ -179,7 +179,7 @@ export function diffProducts(current, next) {
     const prev = byId.get(item.id)
 
     if (!prev) {
-      merged.push(item)
+      merged.push({ ...item, _changedAt: Date.now(), _changeKind: 'new' })
       changed = true
       continue
     }
@@ -189,7 +189,12 @@ export function diffProducts(current, next) {
     const bugsChanged   = JSON.stringify([...item.bugs].sort()) !== JSON.stringify([...prev.bugs].sort())
 
     if (statusChanged || testsChanged || bugsChanged) {
-      merged.push({ ...prev, ...item })
+      let _changeKind = 'tests'
+      if (statusChanged) {
+        _changeKind = item.status === 'APPROVED' ? 'approved'
+                    : item.status === 'MARKED_AS_FAILED' ? 'failed' : 'status'
+      }
+      merged.push({ ...prev, ...item, _changedAt: Date.now(), _changeKind })
       changed = true
     } else {
       merged.push(prev)   // same reference — Svelte won't re-render this card
