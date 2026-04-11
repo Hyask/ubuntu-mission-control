@@ -9,6 +9,33 @@
   let loading = $state(true)
   let error   = $state(null)
 
+  const FLAVOR_ICONS = {
+    edubuntu:         'https://assets.ubuntu.com/v1/a2f090ef-edubuntu-logo.svg',
+    kubuntu:          'https://assets.ubuntu.com/v1/d92401b4-kubuntu-logo.svg',
+    lubuntu:          'https://assets.ubuntu.com/v1/6ac4ba34-lubuntu-logo.svg',
+    'ubuntu-budgie':  'https://assets.ubuntu.com/v1/9b5f100b-ubuntu-budgie-logo-updated.svg',
+    budgie:           'https://assets.ubuntu.com/v1/9b5f100b-ubuntu-budgie-logo-updated.svg',
+    'ubuntu-cinnamon':'https://assets.ubuntu.com/v1/504cc54e-ubuntu-cinnamon-logo.svg',
+    cinnamon:         'https://assets.ubuntu.com/v1/504cc54e-ubuntu-cinnamon-logo.svg',
+    'ubuntu-kylin':   'https://assets.ubuntu.com/v1/a9914e3f-ubuntu-kylin.svg',
+    kylin:            'https://assets.ubuntu.com/v1/a9914e3f-ubuntu-kylin.svg',
+    'ubuntu-mate':    'https://assets.ubuntu.com/v1/b89d0c93-mate.svg',
+    mate:             'https://assets.ubuntu.com/v1/b89d0c93-mate.svg',
+    'ubuntu-studio':  'https://assets.ubuntu.com/v1/4a512076-ubuntustudio.svg',
+    studio:           'https://assets.ubuntu.com/v1/4a512076-ubuntustudio.svg',
+    'ubuntu-unity':   'https://assets.ubuntu.com/v1/219d06b0-ubuntu-unity-logo.png',
+    unity:            'https://assets.ubuntu.com/v1/219d06b0-ubuntu-unity-logo.png',
+    xubuntu:          'https://assets.ubuntu.com/v1/36e8f12b-Xubuntu_logo.svg',
+  }
+
+  let flavorIcon = $derived.by(() => {
+    const n = ((product.name ?? '') + ' ' + (product.displayName ?? '')).toLowerCase()
+    for (const [key, url] of Object.entries(FLAVOR_ICONS)) {
+      if (n.includes(key)) return url
+    }
+    return 'https://assets.ubuntu.com/v1/29985a98-ubuntu-logo32.png'
+  })
+
   const STATUS_LABELS = {
     APPROVED:         '✓ Approved',
     MARKED_AS_FAILED: '✗ Failed',
@@ -102,18 +129,21 @@
     <!-- ── Header ─────────────────────────────────────────────── -->
     <div class="modal-header {cardClass}">
       <div class="header-left">
-        <div class="modal-name">
-          {#if product.displayName}<span class="os-tag">{product.displayName}</span>{/if}
-          <span title={product.name}>{product.name}</span>
-          <a class="ext-link"
-             href="https://tests.ubuntu.com/#/images/{product.id}"
-             target="_blank"
-             rel="noopener noreferrer"
-             title="Open on tests.ubuntu.com">↗</a>
-        </div>
-        <div class="modal-sub">
-          {product.type}{product.arch ? ` · ${product.arch}` : ''}
-          {#if product.mandatory}<span class="mandatory-tag">★ mandatory</span>{/if}
+        <img class="header-flavor-icon" src={flavorIcon} alt="" aria-hidden="true" />
+        <div class="header-left-text">
+          <div class="modal-name">
+            {#if product.displayName}<span class="os-tag">{product.displayName}</span>{/if}
+            <span title={product.name}>{product.name}</span>
+            <a class="ext-link"
+               href="https://tests.ubuntu.com/#/images/{product.id}"
+               target="_blank"
+               rel="noopener noreferrer"
+               title="Open on tests.ubuntu.com">↗</a>
+          </div>
+          <div class="modal-sub">
+            {product.type}{product.arch ? ` · ${product.arch}` : ''}
+            {#if product.mandatory}<span class="mandatory-tag">★ mandatory</span>{/if}
+          </div>
         </div>
       </div>
       <div class="header-right">
@@ -297,7 +327,16 @@
   .modal-header.age      { background: var(--age-bg);    border-bottom-color: var(--age-border); }
   .modal-header.stale    { background: #0c0c10; border-bottom-color: #252525; }
 
-  .header-left  { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+  .header-left  { display: flex; flex-direction: row; align-items: center; gap: 1rem; min-width: 0; }
+
+  .header-flavor-icon {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .header-left-text { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
   .header-right { display: flex; align-items: center; gap: 0.875rem; flex-shrink: 0; }
 
   .modal-name {

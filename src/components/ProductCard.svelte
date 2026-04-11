@@ -18,6 +18,35 @@
     product.tests.inProgress + product.tests.notStarted > 0
   )
 
+  const FLAVOR_ICONS = {
+    edubuntu:        'https://assets.ubuntu.com/v1/a2f090ef-edubuntu-logo.svg',
+    kubuntu:         'https://assets.ubuntu.com/v1/d92401b4-kubuntu-logo.svg',
+    lubuntu:         'https://assets.ubuntu.com/v1/6ac4ba34-lubuntu-logo.svg',
+    'ubuntu-budgie': 'https://assets.ubuntu.com/v1/9b5f100b-ubuntu-budgie-logo-updated.svg',
+    budgie:          'https://assets.ubuntu.com/v1/9b5f100b-ubuntu-budgie-logo-updated.svg',
+    'ubuntu-cinnamon':'https://assets.ubuntu.com/v1/504cc54e-ubuntu-cinnamon-logo.svg',
+    cinnamon:        'https://assets.ubuntu.com/v1/504cc54e-ubuntu-cinnamon-logo.svg',
+    'ubuntu-kylin':  'https://assets.ubuntu.com/v1/a9914e3f-ubuntu-kylin.svg',
+    kylin:           'https://assets.ubuntu.com/v1/a9914e3f-ubuntu-kylin.svg',
+    'ubuntu-mate':   'https://assets.ubuntu.com/v1/b89d0c93-mate.svg',
+    mate:            'https://assets.ubuntu.com/v1/b89d0c93-mate.svg',
+    'ubuntu-studio': 'https://assets.ubuntu.com/v1/4a512076-ubuntustudio.svg',
+    studio:          'https://assets.ubuntu.com/v1/4a512076-ubuntustudio.svg',
+    'ubuntu-unity':  'https://assets.ubuntu.com/v1/219d06b0-ubuntu-unity-logo.png',
+    unity:           'https://assets.ubuntu.com/v1/219d06b0-ubuntu-unity-logo.png',
+    xubuntu:         'https://assets.ubuntu.com/v1/36e8f12b-Xubuntu_logo.svg',
+  }
+
+  const UBUNTU_DEFAULT = 'https://assets.ubuntu.com/v1/29985a98-ubuntu-logo32.png'
+
+  let flavorIcon = $derived.by(() => {
+    const n = ((product.name ?? '') + ' ' + (product.displayName ?? '')).toLowerCase()
+    for (const [key, url] of Object.entries(FLAVOR_ICONS)) {
+      if (n.includes(key)) return url
+    }
+    return UBUNTU_DEFAULT
+  })
+
   let isStale = $derived((product.ageDays ?? 999) > 7)
 
   // Orange-red at 8d fading to grey at 28d+
@@ -40,6 +69,7 @@
     {#if statusIcon}
       <span class="chip-icon {cardClass}">{statusIcon}</span>
     {/if}
+    <img class="flavor-icon" src={flavorIcon} alt="" aria-hidden="true" />
   </div>
   <div class="chip-bottom">
     <span class="chip-arch">{product.arch}</span>
@@ -93,11 +123,18 @@
   }
   .chip.default  { border-left-color: #3a3a3a; }
 
+  .flavor-icon {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
   /* ── Top row: name + status icon ─── */
   .chip-top {
     display: flex;
     justify-content: space-between;
-    align-items: baseline;
+    align-items: center;
     gap: 0.44rem;
     overflow: hidden;
   }
