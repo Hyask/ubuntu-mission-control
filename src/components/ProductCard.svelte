@@ -111,6 +111,12 @@
     box-shadow: 0 3px 10px rgba(0,0,0,0.4);
   }
 
+  .chip:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .chip:focus:not(:focus-visible) { outline: none; }
+
   .chip.approved {
     background: var(--green-bg);
     border-color: var(--green-border);

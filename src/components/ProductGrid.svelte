@@ -5,6 +5,19 @@
   let { products } = $props()
 
   let selectedProduct = $state(null)
+  let gridEl = $state(null)
+
+  function onGridKeydown(e) {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return
+    const cards = [...gridEl.querySelectorAll('button.chip')]
+    const idx = cards.indexOf(document.activeElement)
+    if (idx === -1) return
+    e.preventDefault()
+    const next = (e.key === 'ArrowRight' || e.key === 'ArrowDown')
+      ? cards[idx + 1]
+      : cards[idx - 1]
+    next?.focus()
+  }
 
   // Group products into swimlanes by build age.
   // Ages 0–7 each get their own lane; anything older collapses into "Stale".
@@ -44,7 +57,8 @@
 {#if products.length === 0}
   <div class="empty">No artifacts found.</div>
 {:else}
-  <div class="swimlanes">
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div class="swimlanes" bind:this={gridEl} onkeydown={onGridKeydown} role="list">
     {#each lanes as lane}
       <div class="lane">
 
