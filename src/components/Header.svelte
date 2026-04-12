@@ -40,7 +40,7 @@
   <!-- Logo + title -->
   <div class="logo">
     <img src="https://assets.ubuntu.com/v1/82818827-CoF_white.svg" alt="Ubuntu" />
-    <span class="title">Release Mission Control</span>
+    <span class="title">Ubuntu Mission Control</span>
   </div>
 
   <span class="sep">|</span>
