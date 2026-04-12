@@ -5,11 +5,14 @@
   /** @type {{ product: import('../lib/processor.js').Product, showCalendar?: boolean, onArtefactChange?: (a: any) => void }} */
   let { product, showCalendar = true, onArtefactChange = null } = $props()
 
-  let loading     = $state(true)
-  let error       = $state(null)
-  let days        = $state([])   // 30 entries, index 0 = oldest
-  let rate        = $state(null) // { built, approved, total }
-  let selectedDay = $state(null) // index into days[]
+  let loading        = $state(true)   // fast initial load (current build only)
+  let error          = $state(null)
+  let days           = $state([])     // 30 entries, index 0 = oldest
+  let rate           = $state(null)   // { built, approved, total } — set after full history load
+  let selectedDay    = $state(null)   // index into days[]
+  let historyLoading = $state(false)  // full 30-day load in progress
+  let historyLoaded  = $state(false)  // full 30-day load complete
+  let historyError   = $state(null)
 
   const STATUS_LABELS = {
     APPROVED:         '✓ Approved',
@@ -17,13 +20,103 @@
     UNDECIDED:        '? Undecided',
   }
 
+  // ── Helpers shared by both load paths ─────────────────────────────────
+  async function loadDayTestData(day, rawBuilds) {
+    const execs = rawBuilds
+      .flatMap(b => b.test_executions ?? [])
+      .filter(te => te.test_plan === 'Manual Testing')
+
+    let passed     = execs.filter(e => e.status === 'PASSED').length
+    let failed     = execs.filter(e => ['FAILED', 'ENDED_PREMATURELY'].includes(e.status)).length
+    let inProgress = execs.filter(e => e.status === 'IN_PROGRESS').length
+    let notStarted = execs.filter(e => ['NOT_STARTED', 'NOT_TESTED'].includes(e.status)).length
+
+    const execResults = new Map()
+    let resultPassed = 0, resultFailed = 0
+    const execsWithResults = new Set()
+    await Promise.all(
+      execs.map(async exec => {
+        const results = await fetchTestResults(exec.id).catch(() => [])
+        execResults.set(exec.id, results)
+        if (results.length > 0) {
+          execsWithResults.add(exec.id)
+          for (const r of results) {
+            if (r.status === 'PASSED')      resultPassed++
+            else if (r.status === 'FAILED') resultFailed++
+          }
+        }
+      }),
+    )
+    if (resultPassed + resultFailed > 0) {
+      passed     = resultPassed
+      failed     = resultFailed
+      inProgress = Math.max(0, inProgress - execsWithResults.size)
+    }
+
+    day.tests = { passed, failed, inProgress, notStarted }
+    day.builds = rawBuilds
+      .map(b => ({
+        ...b,
+        test_executions: (b.test_executions ?? [])
+          .filter(te => te.test_plan === 'Manual Testing')
+          .map(exec => ({ ...exec, results: execResults.get(exec.id) ?? [] })),
+      }))
+      .filter(b => b.test_executions.length > 0)
+  }
+
+  // ── Fast path: load only the current artifact on mount ────────────────
   onMount(async () => {
     try {
-      // The /versions endpoint returns all historical daily builds for this
-      // product, each with its own artefact_id (e.g. [{version:"20260411", artefact_id:12174}]).
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+
+      // Build 30-day scaffold (all empty)
+      const dayData = Array.from({ length: 30 }, (_, i) => {
+        const d = new Date(today)
+        d.setDate(d.getDate() - (29 - i))
+        const key = d.toISOString().slice(0, 10)
+        return { date: key, artefactId: null, artefact: null, tests: null, builds: [] }
+      })
+
+      // Place current product in its date slot (derived from version prefix)
+      const productBase = (product.version ?? '').slice(0, 8)
+      let productSlot = dayData.length - 1  // default: last slot (today)
+      if (/^\d{8}$/.test(productBase)) {
+        const productKey = `${productBase.slice(0, 4)}-${productBase.slice(4, 6)}-${productBase.slice(6, 8)}`
+        const idx = dayData.findIndex(d => d.date === productKey)
+        if (idx !== -1) productSlot = idx
+      }
+
+      dayData[productSlot].artefactId = product.id
+      // Construct minimal artefact from product props — no extra API call needed
+      dayData[productSlot].artefact = { id: product.id, version: product.version, status: product.status }
+
+      const rawBuilds = await fetchBuilds(product.id)
+      await loadDayTestData(dayData[productSlot], rawBuilds)
+
+      days = dayData
+      selectedDay = productSlot
+    } catch (e) {
+      error = e.message
+    } finally {
+      loading = false
+    }
+  })
+
+  // ── Lazy path: load full 30-day history only when calendar is opened ───
+  $effect(() => {
+    if (showCalendar && !historyLoaded && !historyLoading) {
+      loadFullHistory()
+    }
+  })
+
+  async function loadFullHistory() {
+    historyLoading = true
+    historyError = null
+    try {
       const rawVersions = await fetchArtefactVersions(product.id)
 
-      // Build date → artefact_id map, keeping highest version string per day.
+      // Build date → artefact_id map
       const byDate = new Map()
       for (const v of rawVersions) {
         const base = (v.version ?? '').slice(0, 8)
@@ -33,15 +126,13 @@
         if (!prev || v.version > prev.version) byDate.set(key, v.artefact_id)
       }
 
-      // Ensure today's artifact (product.id) is always included — the API may
-      // omit the latest version from the /versions list.
+      // Ensure current artifact is always included (API may omit latest)
       const productBase = (product.version ?? '').slice(0, 8)
       if (/^\d{8}$/.test(productBase)) {
-        const todayKey = `${productBase.slice(0, 4)}-${productBase.slice(4, 6)}-${productBase.slice(6, 8)}`
-        if (!byDate.has(todayKey)) byDate.set(todayKey, product.id)
+        const productKey = `${productBase.slice(0, 4)}-${productBase.slice(4, 6)}-${productBase.slice(6, 8)}`
+        if (!byDate.has(productKey)) byDate.set(productKey, product.id)
       }
 
-      // Build the 30-day window (oldest → newest, today is index 29)
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       const dayData = Array.from({ length: 30 }, (_, i) => {
@@ -51,7 +142,6 @@
         return { date: key, artefactId: byDate.get(key) ?? null, artefact: null, tests: null, builds: [] }
       })
 
-      // For every day that had a build, fetch artefact status + executions in parallel.
       await Promise.all(
         dayData.map(async day => {
           if (!day.artefactId) return
@@ -60,53 +150,7 @@
             fetchBuilds(day.artefactId).catch(() => []),
           ])
           day.artefact = artefact
-
-          const execs = rawBuilds
-            .flatMap(b => b.test_executions ?? [])
-            .filter(te => te.test_plan === 'Manual Testing')
-
-          // Phase 2: execution-level status counts (coarse, matches processor.js)
-          let passed     = execs.filter(e => e.status === 'PASSED').length
-          let failed     = execs.filter(e => ['FAILED', 'ENDED_PREMATURELY'].includes(e.status)).length
-          let inProgress = execs.filter(e => e.status === 'IN_PROGRESS').length
-          let notStarted = execs.filter(e => ['NOT_STARTED', 'NOT_TESTED'].includes(e.status)).length
-
-          // Phase 3: fetch individual test results and overwrite with real counts.
-          // Also store results per exec for the detail panel — no extra API calls needed.
-          const execResults = new Map()
-          let resultPassed = 0
-          let resultFailed = 0
-          const execsWithResults = new Set()
-          await Promise.all(
-            execs.map(async exec => {
-              const results = await fetchTestResults(exec.id).catch(() => [])
-              execResults.set(exec.id, results)
-              if (results.length > 0) {
-                execsWithResults.add(exec.id)
-                for (const r of results) {
-                  if (r.status === 'PASSED')      resultPassed++
-                  else if (r.status === 'FAILED') resultFailed++
-                }
-              }
-            }),
-          )
-          if (resultPassed + resultFailed > 0) {
-            passed     = resultPassed
-            failed     = resultFailed
-            inProgress = Math.max(0, inProgress - execsWithResults.size)
-          }
-
-          day.tests = { passed, failed, inProgress, notStarted }
-
-          // Store enriched builds (with results attached) for the clickable detail panel.
-          day.builds = rawBuilds
-            .map(b => ({
-              ...b,
-              test_executions: (b.test_executions ?? [])
-                .filter(te => te.test_plan === 'Manual Testing')
-                .map(exec => ({ ...exec, results: execResults.get(exec.id) ?? [] })),
-            }))
-            .filter(b => b.test_executions.length > 0)
+          await loadDayTestData(day, rawBuilds)
         }),
       )
 
@@ -115,17 +159,21 @@
       const approved = dayData.filter(d => d.artefact?.status === 'APPROVED').length
       rate = { built, approved, total: 30 }
 
-      // Default selection: most recent built day (today if built, else scan backwards)
-      const lastBuiltIdx = dayData.reduceRight(
-        (found, d, i) => (found !== -1 ? found : d.artefact ? i : -1), -1,
-      )
-      if (lastBuiltIdx !== -1) selectedDay = lastBuiltIdx
+      // Preserve current selection if still valid, otherwise pick last built day
+      if (selectedDay === null || !dayData[selectedDay]?.artefact) {
+        const lastBuiltIdx = dayData.reduceRight(
+          (found, d, i) => (found !== -1 ? found : d.artefact ? i : -1), -1,
+        )
+        if (lastBuiltIdx !== -1) selectedDay = lastBuiltIdx
+      }
+
+      historyLoaded = true
     } catch (e) {
-      error = e.message
+      historyError = e.message
     } finally {
-      loading = false
+      historyLoading = false
     }
-  })
+  }
 
   function dayLabel(dateStr) {
     const [y, m, d] = dateStr.split('-').map(Number)
@@ -215,10 +263,10 @@
     {/if}
 
     <!-- ── State messages ──────────────────────────────────────────── -->
-    {#if loading}
+    {#if historyError}
+      <div class="hist-state err">Error: {historyError}</div>
+    {:else if !historyLoaded}
       <div class="hist-state">Loading 30-day history…</div>
-    {:else if error}
-      <div class="hist-state err">Error: {error}</div>
     {:else if days.every(d => !d.artefact)}
       <div class="hist-state">No historical data found for this product.</div>
     {:else}
