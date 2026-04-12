@@ -1,13 +1,23 @@
 <script>
   import { onMount } from 'svelte'
   import { fetchBuilds, fetchTestResults } from '../api/client.js'
+  import HistoryPanel from './HistoryPanel.svelte'
 
-  /** @type {{ product: import('../lib/processor.js').Product, onclose: () => void }} */
-  let { product, onclose } = $props()
+  /** @type {{ product: import('../lib/processor.js').Product, release: string, onclose: () => void }} */
+  let { product, release = '', onclose } = $props()
 
   let builds  = $state([])
   let loading = $state(true)
   let error   = $state(null)
+
+  // Tab: 'builds' | 'history'. History panel mounts lazily on first switch.
+  let activeTab     = $state('builds')
+  let historyMounted = $state(false)
+
+  function switchTab(tab) {
+    activeTab = tab
+    if (tab === 'history') historyMounted = true
+  }
 
   const FLAVOR_ICONS = {
     edubuntu:         'https://assets.ubuntu.com/v1/a2f090ef-edubuntu-logo.svg',
@@ -195,8 +205,29 @@
       {/if}
     </div>
 
+    <!-- ── Tab bar ──────────────────────────────────────────── -->
+    <div class="tab-bar">
+      <button
+        class="tab-btn"
+        class:active={activeTab === 'builds'}
+        onclick={() => switchTab('builds')}
+      >Builds</button>
+      <button
+        class="tab-btn"
+        class:active={activeTab === 'history'}
+        onclick={() => switchTab('history')}
+      >30-day History</button>
+    </div>
+
+    <!-- ── History panel (lazy) ──────────────────────────────── -->
+    {#if historyMounted}
+      <div class:hidden={activeTab !== 'history'} class="history-wrap">
+        <HistoryPanel {product} {release} />
+      </div>
+    {/if}
+
     <!-- ── Build / test-run body ──────────────────────────────── -->
-    <div class="modal-body">
+    <div class="modal-body" class:hidden={activeTab !== 'builds'}>
       {#if loading}
         <div class="state-msg">Loading build details…</div>
       {:else if error}
@@ -454,6 +485,41 @@
     align-items: center;
     gap: 0.39rem;
     flex-wrap: wrap;
+  }
+
+  /* ── Tab bar ─────────────────────────────────────────────── */
+  .tab-bar {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    flex-shrink: 0;
+    padding: 0 1.54rem;
+  }
+
+  .tab-btn {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    font-size: 0.975rem;
+    font-family: inherit;
+    font-weight: 600;
+    padding: 0.6rem 1.1rem 0.55rem;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    margin-bottom: -1px;
+  }
+  .tab-btn:hover { color: var(--text-normal); }
+  .tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .hidden { display: none; }
+
+  .history-wrap {
+    overflow-y: auto;
+    flex: 1;
   }
 
   /* ── Body ─────────────────────────────────────────────────── */

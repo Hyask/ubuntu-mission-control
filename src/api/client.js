@@ -11,6 +11,12 @@ async function apiFetch(path) {
 export const fetchArtefacts = (family = 'image') =>
   apiFetch(`/v1/artefacts?family=${family}`)
 
+export const fetchArtefactVersions = artefactId =>
+  apiFetch(`/v1/artefacts/${artefactId}/versions`)
+
+export const fetchArtefact = artefactId =>
+  apiFetch(`/v1/artefacts/${artefactId}`)
+
 export const fetchBuilds = artefactId =>
   apiFetch(`/v1/artefacts/${artefactId}/builds`)
 

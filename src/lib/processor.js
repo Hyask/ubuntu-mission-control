@@ -13,6 +13,7 @@ export function buildProductItems(artefacts, milestone) {
     .map(a => ({
       id:          a.id,
       name:        a.name,
+      release:     a.release,
       displayName: a.os || artifactTypeLabel(a.name, a.release),
       arch:        a.architecture || extractArch(a.name),
       type:        artifactTypeLabel(a.name, a.release),
