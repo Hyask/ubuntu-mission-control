@@ -10,6 +10,7 @@
   let days           = $state([])     // 30 entries, index 0 = oldest
   let rate           = $state(null)   // { built, approved, total } — set after full history load
   let selectedDay    = $state(null)   // index into days[]
+  let productSlot    = $state(-1)     // days[] index of the current artifact
   let historyLoading = $state(false)  // full 30-day load in progress
   let historyLoaded  = $state(false)  // full 30-day load complete
   let historyError   = $state(null)
@@ -80,11 +81,11 @@
 
       // Place current product in its date slot (derived from version prefix)
       const productBase = (product.version ?? '').slice(0, 8)
-      let productSlot = dayData.length - 1  // default: last slot (today)
+      productSlot = dayData.length - 1  // default: last slot (today)
       if (/^\d{8}$/.test(productBase)) {
         const productKey = `${productBase.slice(0, 4)}-${productBase.slice(4, 6)}-${productBase.slice(6, 8)}`
         const idx = dayData.findIndex(d => d.date === productKey)
-        if (idx !== -1) productSlot = idx
+        if (idx !== -1) productSlot = idx  // now a $state, readable by effects
       }
 
       dayData[productSlot].artefactId = product.id
@@ -108,6 +109,11 @@
     if (showCalendar && !historyLoaded && !historyLoading) {
       loadFullHistory()
     }
+  })
+
+  // ── Reset to latest build when switching back from history ────────────
+  $effect(() => {
+    if (!showCalendar && productSlot !== -1) selectedDay = productSlot
   })
 
   async function loadFullHistory() {
