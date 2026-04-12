@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte'
-  import { fetchArtefact, fetchArtefactVersions, fetchBuilds } from '../api/client.js'
+  import { fetchArtefact, fetchArtefactVersions, fetchBuilds, fetchTestResults } from '../api/client.js'
 
   /** @type {{ product: import('../lib/processor.js').Product }} */
   let { product } = $props()
@@ -56,12 +56,38 @@
           const execs = builds
             .flatMap(b => b.test_executions ?? [])
             .filter(te => te.test_plan === 'Manual Testing')
-          day.tests = {
-            passed:     execs.filter(e => e.status === 'PASSED').length,
-            failed:     execs.filter(e => ['FAILED', 'ENDED_PREMATURELY'].includes(e.status)).length,
-            inProgress: execs.filter(e => e.status === 'IN_PROGRESS').length,
-            notStarted: execs.filter(e => ['NOT_STARTED', 'NOT_TESTED'].includes(e.status)).length,
+
+          // Phase 2: execution-level status counts (coarse, matches processor.js)
+          let passed     = execs.filter(e => e.status === 'PASSED').length
+          let failed     = execs.filter(e => ['FAILED', 'ENDED_PREMATURELY'].includes(e.status)).length
+          let inProgress = execs.filter(e => e.status === 'IN_PROGRESS').length
+          let notStarted = execs.filter(e => ['NOT_STARTED', 'NOT_TESTED'].includes(e.status)).length
+
+          // Phase 3: fetch individual test results and overwrite with real counts.
+          // Mirrors processor.js enrichWithBugs — execution status stays IN_PROGRESS
+          // even after results are submitted, so per-result tallying is the source of truth.
+          let resultPassed = 0
+          let resultFailed = 0
+          const execsWithResults = new Set()
+          await Promise.all(
+            execs.map(async exec => {
+              const results = await fetchTestResults(exec.id).catch(() => [])
+              if (results.length > 0) {
+                execsWithResults.add(exec.id)
+                for (const r of results) {
+                  if (r.status === 'PASSED')      resultPassed++
+                  else if (r.status === 'FAILED') resultFailed++
+                }
+              }
+            }),
+          )
+          if (resultPassed + resultFailed > 0) {
+            passed     = resultPassed
+            failed     = resultFailed
+            inProgress = Math.max(0, inProgress - execsWithResults.size)
           }
+
+          day.tests = { passed, failed, inProgress, notStarted }
         }),
       )
 
