@@ -195,7 +195,8 @@ export function diffProducts(current, next) {
         _changeKind = item.status === 'APPROVED' ? 'approved'
                     : item.status === 'MARKED_AS_FAILED' ? 'failed' : 'status'
       }
-      merged.push({ ...prev, ...item, _changedAt: Date.now(), _changeKind })
+      const _prev = { tests: { ...prev.tests }, bugs: [...prev.bugs], status: prev.status }
+      merged.push({ ...prev, ...item, _changedAt: Date.now(), _changeKind, _prev })
       changed = true
     } else {
       merged.push(prev)   // same reference — Svelte won't re-render this card

@@ -17,6 +17,8 @@
     onAutoRefreshToggle = () => {},
     onIntervalChange    = () => {},
     onManualRefresh     = () => {},
+    notifCount    = 0,
+    onNotifToggle = () => {},
   } = $props()
 
   let selectedRelease = $derived(releases[selectedIndex])
@@ -82,6 +84,18 @@
     />
     <button class="theme-toggle" onclick={toggleTheme} title="{isDark ? 'Switch to light mode' : 'Switch to dark mode'}">
       {isDark ? '☀' : '☾'}
+    </button>
+    <button
+      class="notif-btn"
+      class:has-badge={notifCount > 0}
+      onclick={onNotifToggle}
+      title="Notifications"
+      aria-label="Open notifications{notifCount > 0 ? ` (${notifCount} unread)` : ''}"
+    >
+      ◉
+      {#if notifCount > 0}
+        <span class="notif-badge">{notifCount > 99 ? '99+' : notifCount}</span>
+      {/if}
     </button>
     <div class="clock">{clockStr}</div>
   </div>
@@ -172,6 +186,46 @@
   .theme-toggle:hover {
     color: var(--text);
     border-color: var(--accent);
+  }
+
+  .notif-btn {
+    position: relative;
+    background: none;
+    border: 1px solid var(--border-strong);
+    color: var(--text-muted);
+    font-size: 1.05rem;
+    cursor: pointer;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    line-height: 1;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .notif-btn:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .notif-btn.has-badge {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .notif-badge {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.63rem;
+    font-weight: 700;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 3px;
+    line-height: 1;
+    pointer-events: none;
   }
 
   .clock {

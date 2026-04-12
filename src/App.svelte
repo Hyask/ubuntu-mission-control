@@ -12,6 +12,8 @@
   import Header from './components/Header.svelte'
   import KpiRow from './components/KpiRow.svelte'
   import ProductGrid from './components/ProductGrid.svelte'
+  import NotificationPanel from './components/NotificationPanel.svelte'
+  import { generateNotifications } from './lib/notifications.js'
 
   // ── Milestone ──────────────────────────────────────────────────
   let releases      = $state([])
@@ -21,6 +23,11 @@
   let products   = $state([])
   let kpiDeltas  = $state(null)
   let kpis = $derived(products.length > 0 ? computeKpis(products) : null)
+
+  // ── Notifications ──────────────────────────────────────────────
+  let notifications = $state([])
+  let notifOpen     = $state(false)
+  let unreadCount   = $derived(notifications.filter(n => !n.read).length)
 
   // ── Load state ────────────────────────────────────────────────
   // loadPhase: null = idle, 'initial' = first load (shows overlay),
@@ -98,6 +105,12 @@
         const prevKpis = products.length > 0 ? computeKpis(products) : null
         const { products: merged, changed } = diffProducts(products, items)
         if (changed) {
+          // Generate notifications from changed products before updating state
+          const changedItems = merged.filter(p => p._changeKind)
+          const newNotifs = generateNotifications(changedItems)
+          if (newNotifs.length > 0) {
+            notifications = [...newNotifs.map(n => ({ ...n, read: false })), ...notifications]
+          }
           playUpdateSound()
           products = merged
           if (prevKpis) {
@@ -205,6 +218,29 @@
   }
 
   // ──────────────────────────────────────────────────────────────
+  // Notification handlers
+  // ──────────────────────────────────────────────────────────────
+  function openNotifPanel() {
+    notifOpen = true
+    // Mark all as read when the panel is opened
+    if (notifications.some(n => !n.read)) {
+      notifications = notifications.map(n => ({ ...n, read: true }))
+    }
+  }
+
+  function closeNotifPanel() {
+    notifOpen = false
+  }
+
+  function clearNotifications() {
+    notifications = []
+  }
+
+  function dismissNotification(id) {
+    notifications = notifications.filter(n => n.id !== id)
+  }
+
+  // ──────────────────────────────────────────────────────────────
   // Lifecycle
   // ──────────────────────────────────────────────────────────────
   onMount(() => {
@@ -231,10 +267,20 @@
     {countdown}
     isLoading={loadPhase !== null}
     productCount={products.length}
+    notifCount={unreadCount}
     {onMilestoneChange}
     onAutoRefreshToggle={onAutoRefreshToggle}
     {onIntervalChange}
     {onManualRefresh}
+    onNotifToggle={openNotifPanel}
+  />
+
+  <NotificationPanel
+    open={notifOpen}
+    {notifications}
+    onClose={closeNotifPanel}
+    onClearAll={clearNotifications}
+    onDismiss={dismissNotification}
   />
 
   {#if kpis}
