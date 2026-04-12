@@ -5,10 +5,17 @@
   /** @type {{ product: import('../lib/processor.js').Product }} */
   let { product } = $props()
 
-  let loading  = $state(true)
-  let error    = $state(null)
-  let days     = $state([])   // 30 entries, index 0 = oldest
-  let rate     = $state(null) // { built, approved, total }
+  let loading     = $state(true)
+  let error       = $state(null)
+  let days        = $state([])   // 30 entries, index 0 = oldest
+  let rate        = $state(null) // { built, approved, total }
+  let selectedDay = $state(null) // index into days[]
+
+  const STATUS_LABELS = {
+    APPROVED:         '✓ Approved',
+    MARKED_AS_FAILED: '✗ Failed',
+    UNDECIDED:        '? Undecided',
+  }
 
   onMount(async () => {
     try {
@@ -41,19 +48,20 @@
         const d = new Date(today)
         d.setDate(d.getDate() - (29 - i))
         const key = d.toISOString().slice(0, 10)
-        return { date: key, artefactId: byDate.get(key) ?? null, artefact: null, tests: null }
+        return { date: key, artefactId: byDate.get(key) ?? null, artefact: null, tests: null, builds: [] }
       })
 
       // For every day that had a build, fetch artefact status + executions in parallel.
       await Promise.all(
         dayData.map(async day => {
           if (!day.artefactId) return
-          const [artefact, builds] = await Promise.all([
+          const [artefact, rawBuilds] = await Promise.all([
             fetchArtefact(day.artefactId),
             fetchBuilds(day.artefactId).catch(() => []),
           ])
           day.artefact = artefact
-          const execs = builds
+
+          const execs = rawBuilds
             .flatMap(b => b.test_executions ?? [])
             .filter(te => te.test_plan === 'Manual Testing')
 
@@ -64,14 +72,15 @@
           let notStarted = execs.filter(e => ['NOT_STARTED', 'NOT_TESTED'].includes(e.status)).length
 
           // Phase 3: fetch individual test results and overwrite with real counts.
-          // Mirrors processor.js enrichWithBugs — execution status stays IN_PROGRESS
-          // even after results are submitted, so per-result tallying is the source of truth.
+          // Also store results per exec for the detail panel — no extra API calls needed.
+          const execResults = new Map()
           let resultPassed = 0
           let resultFailed = 0
           const execsWithResults = new Set()
           await Promise.all(
             execs.map(async exec => {
               const results = await fetchTestResults(exec.id).catch(() => [])
+              execResults.set(exec.id, results)
               if (results.length > 0) {
                 execsWithResults.add(exec.id)
                 for (const r of results) {
@@ -88,6 +97,16 @@
           }
 
           day.tests = { passed, failed, inProgress, notStarted }
+
+          // Store enriched builds (with results attached) for the clickable detail panel.
+          day.builds = rawBuilds
+            .map(b => ({
+              ...b,
+              test_executions: (b.test_executions ?? [])
+                .filter(te => te.test_plan === 'Manual Testing')
+                .map(exec => ({ ...exec, results: execResults.get(exec.id) ?? [] })),
+            }))
+            .filter(b => b.test_executions.length > 0)
         }),
       )
 
@@ -95,6 +114,12 @@
       const built    = dayData.filter(d => d.artefact).length
       const approved = dayData.filter(d => d.artefact?.status === 'APPROVED').length
       rate = { built, approved, total: 30 }
+
+      // Default selection: most recent built day (today if built, else scan backwards)
+      const lastBuiltIdx = dayData.reduceRight(
+        (found, d, i) => (found !== -1 ? found : d.artefact ? i : -1), -1,
+      )
+      if (lastBuiltIdx !== -1) selectedDay = lastBuiltIdx
     } catch (e) {
       error = e.message
     } finally {
@@ -104,22 +129,17 @@
 
   function dayLabel(dateStr) {
     const [y, m, d] = dateStr.split('-').map(Number)
-    return new Date(y, m - 1, d).toLocaleDateString('en-GB', {
-      month: 'short',
-      day:   'numeric',
-    })
+    return new Date(y, m - 1, d).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })
   }
 
   function isToday(dateStr) {
     return dateStr === new Date().toISOString().slice(0, 10)
   }
 
-  // Block is green when built, red when no build that day.
   function statusClass(day) {
     return day.artefact ? 'built' : 'miss'
   }
 
-  // Approval overlay shown on built blocks only.
   function approvalMark(day) {
     if (!day.artefact)                               return { mark: '', cls: '' }
     if (day.artefact.status === 'APPROVED')          return { mark: '✓', cls: 'mark-ok' }
@@ -136,15 +156,40 @@
     return parts.length ? parts.join(' ') : null
   }
 
-  // Rate bar width — build rate (days with a build / 30)
-  let ratePct = $derived(
-    rate ? Math.round((rate.built / rate.total) * 100) : 0,
-  )
+  let ratePct = $derived(rate ? Math.round((rate.built / rate.total) * 100) : 0)
   let rateColor = $derived(
-    ratePct >= 70 ? '#4caf50'
-    : ratePct >= 40 ? '#ff9800'
-    : '#e53935',
+    ratePct >= 70 ? '#4caf50' : ratePct >= 40 ? '#ff9800' : '#e53935',
   )
+
+  // Currently selected day object
+  let selDay = $derived(selectedDay !== null ? (days[selectedDay] ?? null) : null)
+
+  // ── Detail panel helpers ────────────────────────────────────────────
+  function parseResultName(name) {
+    if (!name) return { tester: null, testName: '—' }
+    const idx = name.indexOf(' - ')
+    if (idx === -1) return { tester: null, testName: name }
+    return { tester: name.slice(0, idx), testName: name.slice(idx + 3) }
+  }
+
+  function execStatusClass(status) {
+    if (status === 'PASSED')                                   return 'exec-passed'
+    if (['FAILED', 'ENDED_PREMATURELY'].includes(status))     return 'exec-failed'
+    if (status === 'IN_PROGRESS')                              return 'exec-progress'
+    return 'exec-pending'
+  }
+
+  function resultStatusClass(status) {
+    if (status === 'PASSED') return 'res-pass'
+    if (status === 'FAILED') return 'res-fail'
+    return 'res-other'
+  }
+
+  function statusBadgeClass(status) {
+    if (status === 'APPROVED')          return 'badge-ok'
+    if (status === 'MARKED_AS_FAILED')  return 'badge-fail'
+    return 'badge-neutral'
+  }
 </script>
 
 <div class="history-panel">
@@ -175,11 +220,12 @@
   {:else}
     <!-- ── Day columns ──────────────────────────────────────────────── -->
     <div class="day-grid">
-      {#each days as day}
+      {#each days as day, i}
         {@const sc             = statusClass(day)}
         {@const { mark, cls } = approvalMark(day)}
         {@const tl             = testLine(day.tests)}
-        <div class="day-col" class:today={isToday(day.date)}>
+        {@const isSelected     = i === selectedDay}
+        <div class="day-col" class:today={isToday(day.date)} class:selected={isSelected}>
           <!-- Test metrics -->
           <div class="test-line" class:has-data={!!tl}>
             {#if tl}
@@ -195,8 +241,16 @@
             {/if}
           </div>
 
-          <!-- Status block -->
-          <div class="day-block {sc}" title="{day.date}{day.artefact ? ' · ' + (day.artefact.status ?? 'UNDECIDED') : ' · no build'}">
+          <!-- Status block — clickable on built days -->
+          <!-- svelte-ignore a11y_interactive_supports_focus -->
+          <div class="day-block {sc}"
+               class:clickable={!!day.artefact}
+               title="{day.date}{day.artefact ? ' · ' + (day.artefact.status ?? 'UNDECIDED') : ' · no build'}"
+               role={day.artefact ? 'button' : 'presentation'}
+               tabindex={day.artefact ? 0 : -1}
+               onclick={() => { if (day.artefact) selectedDay = i }}
+               onkeydown={e => { if (day.artefact && (e.key === 'Enter' || e.key === ' ')) selectedDay = i }}
+          >
             <span class="day-mark {cls}">{mark}</span>
           </div>
 
@@ -214,7 +268,82 @@
       <span class="leg-item"><span class="leg-swatch miss"></span>No build</span>
       <span class="leg-item"><span class="mark-ok leg-mark">✓</span>Approved</span>
       <span class="leg-item"><span class="mark-fail leg-mark">✗</span>Not approved</span>
+      <span class="leg-item leg-hint">Click a day to see its test results</span>
     </div>
+
+    <!-- ── Day detail panel ──────────────────────────────────────── -->
+    {#if selDay}
+      <div class="detail-panel">
+        <!-- Detail header -->
+        <div class="detail-hdr">
+          <div class="detail-hdr-left">
+            <span class="detail-date">{dayLabel(selDay.date)}{isToday(selDay.date) ? ' (today)' : ''}</span>
+            <span class="detail-version">{selDay.artefact?.version ?? '—'}</span>
+            <span class="detail-status-badge {statusBadgeClass(selDay.artefact?.status)}">
+              {STATUS_LABELS[selDay.artefact?.status] ?? '—'}
+            </span>
+          </div>
+          {#if selDay.tests}
+            <div class="detail-counts">
+              {#if selDay.tests.passed}     <span class="chip chip-pass">✓ {selDay.tests.passed}</span>{/if}
+              {#if selDay.tests.failed}     <span class="chip chip-fail">✗ {selDay.tests.failed}</span>{/if}
+              {#if selDay.tests.inProgress} <span class="chip chip-prog">… {selDay.tests.inProgress}</span>{/if}
+              {#if selDay.tests.notStarted} <span class="chip chip-skip">○ {selDay.tests.notStarted}</span>{/if}
+              {#if selDay.tests.passed + selDay.tests.failed + selDay.tests.inProgress + selDay.tests.notStarted === 0}
+                <span class="chip-none">no executions</span>
+              {/if}
+            </div>
+          {/if}
+        </div>
+
+        <!-- Executions + results -->
+        {#if !selDay.builds || selDay.builds.length === 0}
+          <div class="detail-empty">No test executions for this build.</div>
+        {:else}
+          {#each selDay.builds as build}
+            {#each build.test_executions as exec}
+              <div class="det-exec">
+                <div class="det-exec-hdr">
+                  <div class="det-exec-left">
+                    <span class="det-plan">{exec.test_plan ?? 'Test execution'}</span>
+                    {#if exec.environment?.name}
+                      <span class="det-env">{exec.environment.name}</span>
+                    {/if}
+                  </div>
+                  <span class="exec-badge {execStatusClass(exec.status)}">{exec.status ?? '—'}</span>
+                </div>
+
+                {#if exec.results.length === 0}
+                  <div class="det-no-results">No results submitted yet.</div>
+                {:else}
+                  <table class="det-table">
+                    <thead>
+                      <tr>
+                        <th>Tester</th>
+                        <th>Test</th>
+                        <th>Status</th>
+                        <th>Comment</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each exec.results as r}
+                        {@const { tester, testName } = parseResultName(r.name)}
+                        <tr class={resultStatusClass(r.status)}>
+                          <td class="det-tester">{tester ?? '—'}</td>
+                          <td class="det-name">{testName}</td>
+                          <td><span class="res-badge {resultStatusClass(r.status)}">{r.status ?? '—'}</span></td>
+                          <td class="det-comment">{r.comment ?? ''}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                {/if}
+              </div>
+            {/each}
+          {/each}
+        {/if}
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -312,9 +441,24 @@
     width: 32px;
   }
 
+  /* Today: accent ring (blue) */
   .day-col.today .day-block {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
+  }
+
+  /* Selected: bright white ring, overrides today ring */
+  .day-col.selected .day-block {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+    filter: brightness(1.35);
+  }
+
+  /* Both today and selected */
+  .day-col.today.selected .day-block {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+    filter: brightness(1.35);
   }
 
   /* Test metrics line */
@@ -349,12 +493,12 @@
     justify-content: center;
     font-size: 0.95rem;
     font-weight: 700;
-    transition: transform 0.1s;
+    transition: transform 0.1s, filter 0.1s;
     cursor: default;
   }
-  .day-block:hover { transform: scaleY(1.06); }
+  .day-block.clickable         { cursor: pointer; }
+  .day-block.clickable:hover   { transform: scaleY(1.08); filter: brightness(1.2); }
 
-  /* Green = built, grey = no build data */
   .day-block.built { background: #1a4d1a; }
   .day-block.miss  { background: var(--bg-raised); border: 1px solid var(--border-mid); }
 
@@ -381,6 +525,7 @@
     display: flex;
     gap: 1.25rem;
     flex-wrap: wrap;
+    align-items: center;
     padding-top: 0.25rem;
   }
 
@@ -392,6 +537,13 @@
     color: var(--text-muted);
   }
 
+  .leg-hint {
+    margin-left: auto;
+    font-style: italic;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+  }
+
   .leg-swatch {
     width: 12px;
     height: 12px;
@@ -401,4 +553,182 @@
   .leg-swatch.built { background: #1a4d1a; }
   .leg-swatch.miss  { background: var(--bg-raised); border: 1px solid var(--border-mid); }
   .leg-mark { font-size: 0.85rem; font-weight: 700; }
+
+  /* ── Detail panel ─────────────────────────────────────────────── */
+  .detail-panel {
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .detail-hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.7rem 1.1rem;
+    background: var(--surface-faint);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    flex-wrap: wrap;
+  }
+
+  .detail-hdr-left {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+
+  .detail-date {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-bright);
+  }
+
+  .detail-version {
+    font-size: 0.97rem;
+    font-family: monospace;
+    color: var(--text-dim);
+  }
+
+  .detail-status-badge {
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.12em 0.5em;
+    border-radius: 4px;
+  }
+  .badge-ok      { background: var(--green-border); color: #5ddb5d; }
+  .badge-fail    { background: var(--red-border);   color: var(--red); }
+  .badge-neutral { background: var(--bg-raised);    color: var(--text-muted); }
+
+  .detail-counts {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .chip {
+    padding: 0.1em 0.4em;
+    border-radius: 3px;
+    font-size: 0.97rem;
+    font-weight: 700;
+  }
+  .chip-pass { background: #1a4d1a; color: #5ddb5d; }
+  .chip-fail { background: #4d1a1a; color: var(--red); }
+  .chip-prog { background: #1a2d4d; color: var(--blue); }
+  .chip-skip { background: #2a2a2a; color: var(--text-muted); }
+  .chip-none { font-size: 0.9rem; color: var(--text-dim); font-style: italic; }
+
+  .detail-empty {
+    font-size: 1rem;
+    color: var(--text-dim);
+    font-style: italic;
+    padding: 1rem 1.1rem;
+  }
+
+  /* ── Execution blocks ─────────────────────────────────────────── */
+  .det-exec {
+    border-top: 1px solid rgba(255,255,255,0.04);
+  }
+  .det-exec:first-child { border-top: none; }
+
+  .det-exec-hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.7rem;
+    padding: 0.55rem 1.1rem;
+    background: var(--surface-shade);
+  }
+
+  .det-exec-left {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .det-plan {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-soft);
+  }
+
+  .det-env {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .det-no-results {
+    font-size: 0.95rem;
+    color: var(--text-dim);
+    font-style: italic;
+    padding: 0.55rem 1.1rem;
+  }
+
+  /* ── Results table ────────────────────────────────────────────── */
+  .det-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 1rem;
+  }
+
+  .det-table thead tr { background: rgba(0,0,0,0.2); }
+  .det-table th {
+    text-align: left;
+    padding: 0.35rem 1.1rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border-faint);
+  }
+  .det-table td {
+    padding: 0.4rem 1.1rem;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-soft);
+  }
+  .det-table tr:last-child td { border-bottom: none; }
+
+  .res-pass td { background: rgba(0,60,0,0.15); }
+  .res-fail td { background: rgba(60,0,0,0.15); }
+
+  .det-tester  { color: var(--text-muted); white-space: nowrap; font-size: 0.95rem; }
+  .det-name    { color: var(--text-normal); }
+  .det-comment { color: var(--text-muted); font-style: italic; font-size: 0.95rem; }
+
+  /* ── Exec badge ───────────────────────────────────────────────── */
+  .exec-badge {
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 0.1em 0.45em;
+    border-radius: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .exec-passed  { background: #1a4d1a; color: #5ddb5d; }
+  .exec-failed  { background: #4d1a1a; color: var(--red); }
+  .exec-progress{ background: #1a2d4d; color: var(--blue); }
+  .exec-pending { background: var(--bg-raised); color: var(--text-muted); }
+
+  /* ── Result badge ─────────────────────────────────────────────── */
+  .res-badge {
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 0.1em 0.4em;
+    border-radius: 2px;
+    text-transform: uppercase;
+  }
+  .res-badge.res-pass  { background: #1a4d1a; color: #5ddb5d; }
+  .res-badge.res-fail  { background: #4d1a1a; color: var(--red); }
+  .res-badge.res-other { background: var(--bg-raised); color: var(--text-muted); }
 </style>
