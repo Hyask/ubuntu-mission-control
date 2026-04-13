@@ -124,8 +124,6 @@ The `mandatory: true` flag marks critical builds with a ★ on their card.
 
 ## CORS / proxy
 
-The API does not send `Access-Control-Allow-Origin`. In dev and preview (`make dev` / `make serve`), Vite's proxy handles this transparently.
+The API does not send `Access-Control-Allow-Origin`. In dev and preview (`make dev` / `make serve`), Vite's proxy handles this transparently. The built app always uses `/api/v1/...` URLs.
 
-For production deployment (charm), `proxy.py` strips the `/api` prefix and forwards requests to `https://tests-api.ubuntu.com`. The built app always uses `/api/v1/...` URLs.
-
-For a public GitHub Pages deployment, a Cloudflare Worker or Netlify/Vercel serverless function would be needed as a proxy.
+For a public deployment without a Node server (e.g. GitHub Pages), a Cloudflare Worker or Netlify/Vercel serverless function would be needed as a proxy.
