@@ -247,6 +247,22 @@
     if (status === 'MARKED_AS_FAILED')  return 'badge-fail'
     return 'badge-neutral'
   }
+
+  /**
+   * When a test execution is still IN_PROGRESS but all results have been submitted,
+   * derive the effective status from the actual results rather than the stale
+   * API status (testers often forget to formally close the execution).
+   */
+  function effectiveExecStatus(exec) {
+    if (exec.status === 'IN_PROGRESS' && exec.results?.length > 0) {
+      const nonSkipped = exec.results.filter(r => r.status !== 'SKIPPED')
+      if (nonSkipped.length > 0) {
+        if (nonSkipped.every(r => r.status === 'PASSED')) return 'PASSED'
+        if (nonSkipped.some(r => r.status === 'FAILED'))  return 'FAILED'
+      }
+    }
+    return exec.status
+  }
 </script>
 
 <div class="history-panel">
@@ -369,6 +385,7 @@
       {:else}
         {#each selDay.builds as build}
           {#each build.test_executions as exec}
+            {@const effStatus = effectiveExecStatus(exec)}
             <div class="det-exec">
               <div class="det-exec-hdr">
                 <div class="det-exec-left">
@@ -377,7 +394,7 @@
                     <span class="det-env">{exec.environment.name}</span>
                   {/if}
                 </div>
-                <span class="exec-badge {execStatusClass(exec.status)}">{exec.status ?? '—'}</span>
+                <span class="exec-badge {execStatusClass(effStatus)}">{effStatus ?? '—'}</span>
               </div>
 
               {#if exec.results.length === 0}
