@@ -32,6 +32,19 @@ For full feature details and screenshots, see [Feature Guide](docs/FEATURES.md).
 - [Feature Guide](docs/FEATURES.md)
 - [Architecture and Design](DESIGN.md)
 - [Test Observer API Notes](TEST_OBSERVER_API.md)
+- [Contributing Guide](CONTRIBUTING.md)
+
+## AI Disclosure
+
+This project has been developed hand in hand with AI Agent like [Claude](https://claude.ai/) (Anthropic) and Copilot.
+
+To maintain code quality and reliability, several quality gates run on every change:
+
+- **Tests** — [Vitest](https://vitest.dev/) ensures core data pipeline and component behavior are correct
+- **Type checking** — Svelte enforces component type safety within templates
+- **Build verification** — Vite production builds are verified to catch bundle and dependency issues
+
+Development continues with a focus on learning best practices for AI-assisted development while maintaining high code quality standards. See [CONTRIBUTING.md](CONTRIBUTING.md) for details on how we review and test AI-generated code.
 
 ## Quick Start
 
